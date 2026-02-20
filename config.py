@@ -52,5 +52,5 @@ ANTHROPIC_MODEL = _str_default("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022")
 GEMINI_API_KEY = _str("GEMINI_API_KEY")
 GEMINI_MODEL = _str_default("GEMINI_MODEL", "gemini-2.5-pro")
 
-# ----- 输出目录 -----
-OUTPUT_DIR = str(Path(__file__).resolve().parent / "output")
+# ----- 输出目录：默认用「当前工作目录/output」，便于在运行处直接看到文件；可用 ZIWEI_OUTPUT_DIR 覆盖 -----
+OUTPUT_DIR = _str("ZIWEI_OUTPUT_DIR") or str((Path.cwd() / "output").resolve())

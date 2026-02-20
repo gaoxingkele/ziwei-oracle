@@ -97,8 +97,9 @@ def _palace_to_text(p: dict[str, Any]) -> str:
 def render_chart_image(
     main_json_data: dict[str, Any],
     save_path: str | Path,
-    cell_w: int = 140,
-    cell_h: int = 100,
+    cell_w: int = 160,
+    cell_h: int = 110,
+    title: str | None = None,
 ) -> str:
     """将命盘画成 4x3 宫位图，保存为 PNG，返回保存路径。"""
     try:
@@ -106,8 +107,11 @@ def render_chart_image(
     except ImportError:
         raise RuntimeError("请先安装 Pillow: pip install Pillow")
     out = Path(save_path)
+    if out.suffix.lower() != ".png":
+        out = out.with_suffix(".png")
     out.parent.mkdir(parents=True, exist_ok=True)
-    w, h = cell_w * 3, cell_h * 4
+    header_h = 36 if title else 0
+    w, h = cell_w * 3, header_h + cell_h * 4
     img = Image.new("RGB", (w, h), color=(255, 252, 240))
     draw = ImageDraw.Draw(img)
     font_path = None
@@ -122,19 +126,58 @@ def render_chart_image(
             font_path = name
             break
     try:
+        font_title = ImageFont.truetype(font_path, 16) if font_path else ImageFont.load_default()
         font_l = ImageFont.truetype(font_path, 14) if font_path else ImageFont.load_default()
         font_s = ImageFont.truetype(font_path, 11) if font_path else ImageFont.load_default()
     except OSError:
-        font_l = font_s = ImageFont.load_default()
+        font_title = font_l = font_s = ImageFont.load_default()
+    if title:
+        draw.rectangle([0, 0, w, header_h], fill=(240, 235, 220))
+        draw.text((w // 2 - 50, 8), title, fill=(60, 40, 20), font=font_title)
     palaces = main_json_data.get("palaces") or []
     for i, p in enumerate(palaces[:12]):
         row, col = i // 3, i % 3
-        x0, y0 = col * cell_w, row * cell_h
+        x0, y0 = col * cell_w, header_h + row * cell_h
         name = p.get("name", "?")
         major_stars = p.get("majorStars") or []
         star_names = " ".join(s.get("name", "") for s in major_stars[:4])
-        draw.rectangle([x0, y0, x0 + cell_w - 1, y0 + cell_h - 1], outline=(80, 60, 40), width=1)
-        draw.text((x0 + 4, y0 + 2), name, fill=(0, 0, 0), font=font_l)
-        draw.text((x0 + 4, y0 + 22), star_names or "-", fill=(60, 40, 20), font=font_s)
-    img.save(str(out))
+        draw.rectangle([x0, y0, x0 + cell_w - 1, y0 + cell_h - 1], outline=(80, 60, 40), width=2)
+        draw.text((x0 + 6, y0 + 4), name, fill=(0, 0, 0), font=font_l)
+        draw.text((x0 + 6, y0 + 26), star_names or "-", fill=(60, 40, 20), font=font_s)
+    img.save(str(out), format="PNG")
     return str(out)
+
+
+def output_chart_text_and_image(
+    main_json_data: dict[str, Any],
+    output_dir: str,
+    prefix: str = "ziwei_chart",
+    timestamp: str | None = None,
+) -> tuple[str, str]:
+    """
+    计算完紫微盘面后，输出文本版本（保存为 .md）和盘面图片（保存为 .png）。
+    prefix 可为「姓名+生日+时辰+性别」；若 timestamp 为 None 则文件名仅用 prefix（如 张三_1978-04-14_午_男.md）。
+    返回 (文本文件绝对路径, 图片文件绝对路径)。若 PNG 生成失败，图片路径为空字符串。
+    """
+    from datetime import datetime
+    out_root = Path(output_dir).resolve()
+    out_root.mkdir(parents=True, exist_ok=True)
+    if timestamp:
+        path_md = out_root / f"{prefix}_{timestamp}.md"
+        path_png_file = out_root / f"{prefix}_{timestamp}.png"
+    else:
+        path_md = out_root / f"{prefix}.md"
+        path_png_file = out_root / f"{prefix}.png"
+    text = build_text_description(main_json_data)
+    path_md.write_text("# 紫微排盘（文本版本）\n\n" + text, encoding="utf-8")
+    path_png = ""
+    title = f"紫微斗数命盘 {main_json_data.get('solarDate', '')} {main_json_data.get('time', '')}"
+    try:
+        path_png = render_chart_image(
+            main_json_data,
+            path_png_file,
+            title=title,
+        )
+    except Exception:
+        path_png = ""
+    return str(path_md.resolve()), (str(Path(path_png).resolve()) if path_png else "")
