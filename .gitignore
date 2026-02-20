@@ -1,0 +1,26 @@
+# 环境与密钥（勿提交）
+.env
+.env.local
+*.pem
+
+# 输出目录
+output/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.venv/
+venv/
+.env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# 系统
+.DS_Store
+Thumbs.db
