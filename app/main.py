@@ -24,3 +24,13 @@ async def oracle_error_handler(request: Request, exc: OracleError):
 @app.get("/api/v1/health")
 async def health():
     return success({"status": "ok"})
+
+from app.api.v1.router import v1_router
+app.include_router(v1_router)
+
+# Register engines
+import importlib
+importlib.import_module("app.engine.ziwei")
+importlib.import_module("app.engine.meihua")
+importlib.import_module("app.engine.liuyao")
+importlib.import_module("app.engine.astrology")
