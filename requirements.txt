@@ -1,4 +1,8 @@
 kerykeion>=5.7.0
+kinqimen>=0.0.6
+kinliuren>=0.1.2
+ichingshifa>=3.1
+cn2an>=0.5
 najia
 openai>=1.0
 Pillow>=10.0

@@ -6,7 +6,7 @@
 
 | 系统 | 模块 | 依赖 | 能力 |
 |------|------|------|------|
-| 紫微斗数 | `ziwei.py` | py-iztro (pip) | 排盘（py-iztro）、十二宫解析、PNG 宫格图、MD 文本 |
+| 紫微斗数 | `ziwei.py` | app/pureziwei (本地) | 排盘、十二宫解析、运限推算、PNG 宫格图、MD 文本 |
 | 梅花易数 | `meihua.py` | 无 | 时间起卦、互卦/变卦、体用关系、五行生克 |
 | 六爻占卜 | `liuyao.py` | `app/najia` (本地) | najia 编译卦象、世应/六神/六亲/日干支提取 |
 | 西洋占星 | `astrology.py` | kerykeion (pip) | Kerykeion 本命盘、八大行星宫位、SVG 星盘图 |
@@ -40,15 +40,12 @@
 
 ---
 
-### Phase 1.5：紫微斗数本地化（进行中 🔄）
+### Phase 1.5：紫微斗数本地化（已完成 ✅）
 
 #### 1.5.1 PureZiwei 纯 Python 紫微引擎
 
-- **缺口**：py-iztro 依赖 pythonmonkey（SpiderMonkey JS 引擎），冷启动 1.2s、内存 +51MB
-- **方案**：独立项目 `pureziwei/`，纯 Python 重写 iztro 排盘算法
-- **状态**：开发计划已完成（`D:/BaiduSyncdisk/aicoding/pureziwei/PLAN.md`），10 步渐进实现
-- **完成后**：集成到 `app/pureziwei/`，替代 `py_iztro` + `pythonmonkey`
-- **预期效果**：冷启动 <50ms、内存 <3MB、调用 <5ms
+- **已完成**：纯 Python 紫微引擎，集成到 `app/pureziwei/`，替代 `py_iztro` + `pythonmonkey`
+- **效果**：冷启动 <50ms、内存 <3MB、调用 <5ms、175 测试全通过
 
 ---
 
@@ -220,8 +217,8 @@
 app/lunar/             # 原 lunar_python — 八字、黄历
 app/najia/             # 原 najia — 六爻
 
-# 待本地化
-pureziwei/             # 替代 py-iztro — 紫微斗数（进行中）
+# 已本地化
+app/pureziwei/         # 替代 py-iztro — 紫微斗数（已完成）
 
 # 保持 pip 依赖
 kerykeion>=5.7.0       # 西洋占星（swisseph C 扩展，无法纯 Python 替代）
@@ -256,7 +253,7 @@ ds-oracle-cli/
 ├── app/
 │   ├── lunar/            # ✅ 本地化农历/八字/黄历计算库
 │   ├── najia/            # ✅ 本地化六爻排盘库
-│   ├── pureziwei/        # 🔄 本地化紫微排盘库（待完成）
+│   ├── pureziwei/        # ✅ 本地化紫微排盘库
 │   │
 │   ├── engine/
 │   │   ├── ziwei.py      # ✅ 紫微斗数
@@ -301,8 +298,8 @@ ds-oracle-cli/
 | 阶段 | 模块 | 核心库/数据源 | 预期产出 | 状态 |
 |------|------|--------------|----------|:----:|
 | **Phase 1** | 八字 + 黄历 | app/lunar (本地) | 完整八字排盘 + 全量黄历查询 | ✅ |
-| **Phase 1.5** | 紫微斗数本地化 | pureziwei (本地) | 纯 Python 紫微引擎，内存降 50 倍 | 🔄 |
-| **Phase 2** | 奇门 + 六壬 + 周易 | kin- 系列, ichingshifa | 三式排盘解读 + 卦辞原文检索 | |
+| **Phase 1.5** | 紫微斗数本地化 | pureziwei (本地) | 纯 Python 紫微引擎，内存降 50 倍 | ✅ |
+| **Phase 2** | 奇门 + 六壬 + 周易 | kin- 系列, ichingshifa | 三式排盘解读 + 卦辞原文检索 | ✅ |
 | **Phase 3** | 抽签 + 解梦 | GitHub JSON 数据 | 8 种灵签 + 33000+ 解梦条目 | |
 | **Phase 4** | 姓名学 + 面相 AI | GoodGoodName, deepface | 五格测名/起名 + 面相解读 | |
 | **Phase 5** | 太乙 + 风水 + 合婚 | kintaiyi, 自研 | 完整五术体系 | |
