@@ -54,3 +54,11 @@ GEMINI_MODEL = _str_default("GEMINI_MODEL", "gemini-2.5-pro")
 
 # ----- 输出目录：默认用「当前工作目录/output」，便于在运行处直接看到文件；可用 ZIWEI_OUTPUT_DIR 覆盖 -----
 OUTPUT_DIR = _str("ZIWEI_OUTPUT_DIR") or str((Path.cwd() / "output").resolve())
+
+# ----- 西方星相学（kerykeion）默认出生地参数，可在 .env 覆盖 -----
+# 说明：kerykeion 离线排盘需要经纬度和时区。默认使用北京参数。
+ASTRO_CITY = _str_default("ASTRO_CITY", "Beijing")
+ASTRO_NATION = _str_default("ASTRO_NATION", "CN")
+ASTRO_LNG = float(_str_default("ASTRO_LNG", "116.4074"))
+ASTRO_LAT = float(_str_default("ASTRO_LAT", "39.9042"))
+ASTRO_TZ_STR = _str_default("ASTRO_TZ_STR", "Asia/Shanghai")

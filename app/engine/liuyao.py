@@ -4,10 +4,7 @@ from datetime import datetime
 from typing import Any
 from app.engine.registry import ChartRequest, ChartResult, register
 
-try:
-    from najia import Najia
-except ImportError:
-    Najia = None
+from app.najia import Najia
 
 def _normalize_params(raw: str) -> list[int]:
     items = (raw or "").strip().split()
@@ -24,8 +21,6 @@ def _normalize_params(raw: str) -> list[int]:
 
 @register("liuyao")
 def calculate_liuyao_engine(req: ChartRequest) -> ChartResult:
-    if Najia is None:
-        raise RuntimeError("请先安装 najia: pip install najia")
     code = req.extra.get("liuyao_code", "2 2 2 2 2 2")
     params = _normalize_params(code)
     use_date = datetime.now().strftime("%Y-%m-%d %H:%M")

@@ -44,6 +44,50 @@ def _normalize_birth_date(raw: str) -> str:
 
 # 时辰名 -> 序号，与 ziwei.SHICHEN_NAMES 一致
 _SHICHEN_ORDER = "早子 丑 寅 卯 辰 巳 午 未 申 酉 戌 亥 晚子".split()
+_ALL_READING_MODES = {"ziwei", "astro", "bazi", "six", "meihua"}
+
+
+def _format_modes(modes: set[str]) -> str:
+    if not modes:
+        return "base"
+    return " ".join(sorted(modes))
+
+
+def _apply_mode_command(user_input: str, current_modes: set[str]) -> tuple[set[str], str]:
+    """
+    /mode 指令：
+    - /mode full
+    - /mode base
+    - /mode list
+    - /mode ziwei astro
+    - /mode +ziwei -astro
+    """
+    parts = user_input.strip().split()
+    if len(parts) == 1 or (len(parts) == 2 and parts[1] == "list"):
+        return current_modes, f"当前模式: {_format_modes(current_modes)}"
+    args = parts[1:]
+    if len(args) == 1 and args[0] == "full":
+        return set(_ALL_READING_MODES), "已切换到 full（ziwei astro bazi six meihua）"
+    if len(args) == 1 and args[0] in ("base", "none"):
+        return set(), "已切换到 base（仅主回答）"
+
+    next_modes = set(current_modes)
+    explicit: set[str] = set()
+    for token in args:
+        if token.startswith("+") and token[1:] in _ALL_READING_MODES:
+            next_modes.add(token[1:])
+        elif token.startswith("-") and token[1:] in _ALL_READING_MODES:
+            next_modes.discard(token[1:])
+        elif token in _ALL_READING_MODES:
+            explicit.add(token)
+        else:
+            return current_modes, (
+                "无效模式参数。可用: full | base | list | "
+                "ziwei astro bazi six meihua（支持 +mode/-mode）"
+            )
+    if explicit:
+        next_modes = explicit
+    return next_modes, f"模式已更新: {_format_modes(next_modes)}"
 
 
 def _parse_shichen(s: str) -> int:
@@ -100,6 +144,72 @@ def _save_md(content: str, prefix: str) -> str:
     return path
 
 
+def _generate_western_astrology_files(
+    *,
+    name: str,
+    date_str: str,
+    time_index: int,
+    gender: str,
+    shichen_name: str,
+) -> tuple[str, str, str]:
+    """调用 kerykeion 生成西方星盘文本+SVG，返回 (md_path, svg_path, context_text)。"""
+    from astrology import generate_kerykeion_chart_and_text
+
+    file_base = _safe_filename(f"{name}_{date_str}_{shichen_name}_{gender}")
+    md_path, svg_path, context_text = generate_kerykeion_chart_and_text(
+        name=name,
+        date_str=date_str,
+        time_index=time_index,
+        gender=gender,
+        output_dir=str(Path(OUTPUT_DIR).resolve()),
+        file_base=file_base,
+    )
+    print("已自动生成西方星相学星盘：")
+    print(f"  文本: {md_path}")
+    print(f"  SVG : {svg_path}")
+    return md_path, svg_path, context_text
+
+
+def _build_six_context_from_params(
+    *,
+    raw_params: str,
+    birth_desc: str,
+    title: str = "多轮咨询六爻参考",
+) -> tuple[str, str]:
+    """
+    依据用户输入的六爻码生成六爻上下文和落盘文本文件。
+    返回 (six_context, md_path)。
+    """
+    from liuyao import build_liuyao_context, calculate_liuyao, normalize_liuyao_params
+
+    params = normalize_liuyao_params(raw_params)
+    result = calculate_liuyao(
+        params=params,
+        date_str=datetime.now().strftime("%Y-%m-%d %H:%M"),
+        gender="",
+        title=title,
+        guaci=False,
+        verbose=2,
+    )
+    six_context = build_liuyao_context(result)
+    body = "\n".join(
+        [
+            "# 六爻排盘（najia）",
+            "",
+            f"- 出生信息: {birth_desc}",
+            f"- 六爻码: {' '.join(str(x) for x in params)}",
+            "",
+            "## 六爻上下文",
+            six_context,
+            "",
+            "## 原始排盘",
+            result.get("rendered_text", ""),
+        ]
+    )
+    path_md = _save_md(body, "liuyao_chart")
+    return six_context, path_md
+
+
 def _echo_md(content: str) -> None:
     """在终端回显 Markdown 文本。"""
     print("\n" + "=" * 60 + "\n")
@@ -122,6 +232,16 @@ def run_ziwei_chart():
         return
     shichen_name = SHICHEN_NAMES[time_index] if 0 <= time_index < len(SHICHEN_NAMES) else str(time_index)
     file_base = _safe_filename(f"{name}_{date_str}_{shichen_name}_{gender}")
+    try:
+        _generate_western_astrology_files(
+            name=name,
+            date_str=date_str,
+            time_index=time_index,
+            gender=gender,
+            shichen_name=shichen_name,
+        )
+    except Exception as e:
+        print(f"西方星盘生成失败（不影响紫微流程）: {e}")
     try:
         path_md, path_png = output_chart_text_and_image(data, out_dir_abs, file_base, timestamp=None)
     except Exception as e:
@@ -192,6 +312,16 @@ def run_ziwei_reading():
     data = get_astrolabe_data(date_str, time_index, gender, "solar")
     shichen_name = SHICHEN_NAMES[time_index] if 0 <= time_index < len(SHICHEN_NAMES) else str(time_index)
     file_base = _safe_filename(f"{name}_{date_str}_{shichen_name}_{gender}")
+    try:
+        _generate_western_astrology_files(
+            name=name,
+            date_str=date_str,
+            time_index=time_index,
+            gender=gender,
+            shichen_name=shichen_name,
+        )
+    except Exception as e:
+        print(f"西方星盘生成失败（不影响紫微解读）: {e}")
     path_md, path_png = output_chart_text_and_image(data, str(Path(OUTPUT_DIR).resolve()), file_base, timestamp=None)
     print(f"紫微盘面文本已保存: {path_md}")
     if path_png:
@@ -239,6 +369,84 @@ def run_meihua_reading():
     _echo_md("## 解读\n\n" + answer)
 
 
+def run_liuyao_draw():
+    """六爻排盘：输入六爻码，生成排盘文本。"""
+    from liuyao import calculate_liuyao, normalize_liuyao_params
+
+    print("【六爻排盘（najia）】")
+    raw = input("请输入六爻码（6个1~4，空格分隔，如：2 2 1 2 4 2）: ").strip()
+    params = normalize_liuyao_params(raw)
+    title = input("占题（可留空）: ").strip() or "六爻排盘"
+    date_str = input("起卦时间（留空为当前，格式 YYYY-MM-DD HH:MM）: ").strip()
+    if not date_str:
+        date_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+    try:
+        result = calculate_liuyao(
+            params=params,
+            date_str=date_str,
+            gender="",
+            title=title,
+            guaci=False,
+            verbose=2,
+        )
+    except Exception as e:
+        print(f"六爻排盘失败: {e}")
+        return
+    text = result.get("rendered_text", "")
+    path_md = _save_md("# 六爻排盘（najia）\n\n" + text, "liuyao_gua")
+    print(f"已保存: {path_md}")
+    _echo_md(text)
+
+
+def run_liuyao_reading():
+    """六爻解读：排盘后调用 Kimi 进行同题解读。"""
+    from kimi_client import chat
+    from liuyao import build_liuyao_context, calculate_liuyao, normalize_liuyao_params
+    from prompts import SYSTEM_ORACLE, format_six_chat
+
+    print("【六爻解读（Kimi）】")
+    raw = input("请输入六爻码（6个1~4，空格分隔，如：2 2 1 2 4 2）: ").strip()
+    params = normalize_liuyao_params(raw)
+    title = input("占题（可留空）: ").strip() or "六爻问事"
+    question = input("您想问的问题（留空则使用占题）: ").strip() or title
+    date_str = input("起卦时间（留空为当前，格式 YYYY-MM-DD HH:MM）: ").strip()
+    if not date_str:
+        date_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+    try:
+        result = calculate_liuyao(
+            params=params,
+            date_str=date_str,
+            gender="",
+            title=title,
+            guaci=False,
+            verbose=2,
+        )
+        six_context = build_liuyao_context(result)
+    except Exception as e:
+        print(f"六爻排盘失败: {e}")
+        return
+    prompt = format_six_chat(user_query=question, six_context=six_context, birth_context="")
+    print("正在调用 Kimi 解读…")
+    try:
+        answer = chat(prompt, system_content=SYSTEM_ORACLE)
+    except Exception as e:
+        answer = f"调用失败: {e}"
+    out = (
+        "# 六爻解读\n\n"
+        f"## 占题\n{title}\n\n"
+        f"## 问题\n{question}\n\n"
+        "## 六爻上下文\n"
+        f"{six_context}\n\n"
+        "## 原始排盘\n"
+        f"{result.get('rendered_text', '')}\n\n"
+        "## 解读\n"
+        f"{answer}"
+    )
+    path_md = _save_md(out, "liuyao_reading")
+    print(f"已保存: {path_md}")
+    _echo_md("## 解读\n\n" + answer)
+
+
 def run_marriage_analysis():
     """5. 姻缘分析：排盘后输出文本+PNG，再三类分析（婚姻道路、困难挑战、伴侣性格）。"""
     from ziwei import get_astrolabe_data, build_text_description, output_chart_text_and_image, SHICHEN_NAMES
@@ -255,22 +463,32 @@ def run_marriage_analysis():
     data = get_astrolabe_data(date_str, time_index, gender, "solar")
     shichen_name = SHICHEN_NAMES[time_index] if 0 <= time_index < len(SHICHEN_NAMES) else str(time_index)
     file_base = _safe_filename(f"{name}_{date_str}_{shichen_name}_{gender}")
+    try:
+        _generate_western_astrology_files(
+            name=name,
+            date_str=date_str,
+            time_index=time_index,
+            gender=gender,
+            shichen_name=shichen_name,
+        )
+    except Exception as e:
+        print(f"西方星盘生成失败（不影响姻缘分析）: {e}")
     path_md, path_png = output_chart_text_and_image(data, str(Path(OUTPUT_DIR).resolve()), file_base, timestamp=None)
     print(f"紫微盘面文本已保存: {path_md}")
     if path_png:
         print(f"紫微排盘盘面图片 PNG 已保存: {path_png}")
     chart = build_text_description(data)
     results = {}
-    for name, prompt_tpl in [
+    for section_name, prompt_tpl in [
         ("婚姻道路", PROMPT_MARRIAGE_PATH),
         ("困难挑战", PROMPT_CHALLENGES),
         ("伴侣性格", PROMPT_PARTNER_CHARACTER),
     ]:
-        print(f"  正在分析：{name}…")
+        print(f"  正在分析：{section_name}…")
         try:
-            results[name] = chat(prompt_tpl.format(chart=chart), system_content=SYSTEM_ORACLE)
+            results[section_name] = chat(prompt_tpl.format(chart=chart), system_content=SYSTEM_ORACLE)
         except Exception as e:
-            results[name] = f"调用失败: {e}"
+            results[section_name] = f"调用失败: {e}"
     lines = ["# 姻缘分析", "", f"姓名 {name}，生日 {date_str}，时辰 {shichen_name}，性别 {gender}", ""]
     for name, text in results.items():
         lines.append(f"## {name}\n")
@@ -284,19 +502,88 @@ def run_marriage_analysis():
 
 def run_oracle_chat():
     """6. 智能体咨询：多轮对话，保持上下文，直到用户输入 /menu 或 0 或 exit 返回主菜单。"""
-    from kimi_client import chat_with_messages
-    from prompts import SYSTEM_ORACLE
+    from kimi_client import chat, chat_with_messages
+    from meihua import calculate_meihua
+    from prompts import (
+        SYSTEM_ASTRO,
+        SYSTEM_ORACLE,
+        format_astrology_chat,
+        format_bazi_chat,
+        format_meihua_chat,
+        format_six_chat,
+        format_ziwei_chat,
+    )
+    from ziwei import build_text_description, get_astrolabe_data
 
     print("【智能体多轮咨询】结合紫微/梅花思路，可连续提问。输入 /menu 或 0 或 exit 返回主菜单。")
+    print("模式命令: /mode full | /mode base | /mode list | /mode ziwei astro bazi six meihua | /mode +astro -six")
+    print("六爻命令: /six 2 2 1 2 4 2  （设置/更新六爻码）")
     date_str, time_index, gender, name = _parse_ziwei_inputs(skip_if_empty=True)
     system = SYSTEM_ORACLE
     birth_desc = "无"
+    astrology_context = ""
+    ziwei_context = ""
+    bazi_context = ""
+    six_context = ""
+    active_modes = set(_ALL_READING_MODES)
     if date_str is not None and name is not None:
         shichen_name = _SHICHEN_ORDER[time_index] if time_index is not None and 0 <= time_index < len(_SHICHEN_ORDER) else str(time_index or "")
         birth_desc = f"姓名 {name}，生日 {date_str}，时辰 {shichen_name}，性别 {gender or '女'}"
         system = system + "\n\n用户提供的出生信息（可用于紫微思路）：" + birth_desc
+        # 先准备紫微盘文本上下文，用于每轮同题研读
+        try:
+            z_data = get_astrolabe_data(date_str, time_index or 6, gender or "女", "solar")
+            ziwei_text = build_text_description(z_data)
+            ziwei_context = "【紫微盘面摘要（节选）】\n" + "\n".join(ziwei_text.splitlines()[:120])
+            bazi_context = "\n".join(
+                [
+                    "【八字基础信息】",
+                    f"- 阳历生日: {z_data.get('solarDate', date_str)}",
+                    f"- 阴历生日: {z_data.get('lunarDate', '')}",
+                    f"- 八字: {z_data.get('chineseDate', '')}",
+                    f"- 五行局: {z_data.get('fiveElementsClass', '')}",
+                    f"- 性别: {z_data.get('gender', gender or '女')}",
+                ]
+            )
+            print("已加载紫微盘上下文（用于每轮同题解读）。")
+        except Exception as e:
+            print(f"紫微盘上下文加载失败（不影响继续咨询）: {e}")
+        try:
+            _md_path, _svg_path, astrology_context = _generate_western_astrology_files(
+                name=name,
+                date_str=date_str,
+                time_index=time_index or 6,
+                gender=gender or "女",
+                shichen_name=shichen_name,
+            )
+        except Exception as e:
+            print(f"西方星盘生成失败（不影响继续咨询）: {e}")
+        six_seed = input("可选：请输入六爻码（6个1~4，空格分隔；留空跳过）: ").strip()
+        if six_seed:
+            try:
+                six_context, six_md_path = _build_six_context_from_params(
+                    raw_params=six_seed,
+                    birth_desc=birth_desc,
+                )
+                print(f"已生成六爻排盘: {six_md_path}")
+            except Exception as e:
+                print(f"六爻排盘生成失败（可稍后用 /six 设置）: {e}")
+
     messages: list[dict[str, str]] = [{"role": "system", "content": system}]
-    session_lines = ["# 智能体多轮咨询", "", f"姓名 生日 时辰 性别: {birth_desc}", ""]
+    session_lines = ["# 智能体多轮咨询", "", f"姓名 生日 时辰 性别: {birth_desc}", "", f"模式: {_format_modes(active_modes)}", ""]
+    if ziwei_context:
+        session_lines.append("## 紫微盘面摘要\n")
+        session_lines.append(ziwei_context + "\n")
+    if bazi_context:
+        session_lines.append("## 八字基础信息\n")
+        session_lines.append(bazi_context + "\n")
+    if six_context:
+        session_lines.append("## 六爻上下文\n")
+        session_lines.append(six_context + "\n")
+    if astrology_context:
+        session_lines.append("## 西方星相学关键位\n")
+        session_lines.append(astrology_context + "\n")
+
     while True:
         user_input = input("\n您: ").strip()
         if not user_input:
@@ -304,6 +591,31 @@ def run_oracle_chat():
         if user_input in ("/menu", "0", "exit", "quit", "q"):
             print("返回主菜单。")
             break
+        if user_input.startswith("/mode"):
+            active_modes, mode_msg = _apply_mode_command(user_input, active_modes)
+            print(mode_msg)
+            session_lines.append("## 模式切换\n" + mode_msg + "\n")
+            continue
+        if user_input.startswith("/six"):
+            six_raw = user_input.replace("/six", "", 1).strip()
+            if not six_raw:
+                msg = "用法: /six 2 2 1 2 4 2"
+                print(msg)
+                session_lines.append("## 六爻设置\n" + msg + "\n")
+                continue
+            try:
+                six_context, six_md_path = _build_six_context_from_params(
+                    raw_params=six_raw,
+                    birth_desc=birth_desc,
+                )
+                msg = f"六爻码已更新，排盘已保存: {six_md_path}"
+                print(msg)
+                session_lines.append("## 六爻设置\n" + msg + "\n")
+            except Exception as e:
+                msg = f"六爻码设置失败: {e}"
+                print(msg)
+                session_lines.append("## 六爻设置\n" + msg + "\n")
+            continue
         messages.append({"role": "user", "content": user_input})
         session_lines.append("## 您\n" + user_input + "\n")
         try:
@@ -311,6 +623,80 @@ def run_oracle_chat():
         except Exception as e:
             reply = f"调用失败: {e}"
             messages.pop()  # 去掉刚加的 user，方便重试
+        # 同一问题同步提交给紫微研读
+        if "ziwei" in active_modes and ziwei_context:
+            try:
+                ziwei_prompt = format_ziwei_chat(
+                    user_query=user_input,
+                    ziwei_context=ziwei_context,
+                    birth_context=birth_desc if birth_desc != "无" else "",
+                )
+                ziwei_reply = chat(ziwei_prompt, system_content=SYSTEM_ORACLE)
+                reply = reply + "\n\n---\n## 紫微同题补充解读\n" + ziwei_reply
+            except Exception as e:
+                reply = reply + f"\n\n（紫微同题补充解读调用失败: {e}）"
+        if "bazi" in active_modes and bazi_context:
+            try:
+                bazi_prompt = format_bazi_chat(
+                    user_query=user_input,
+                    bazi_context=bazi_context,
+                    birth_context=birth_desc if birth_desc != "无" else "",
+                )
+                bazi_reply = chat(bazi_prompt, system_content=SYSTEM_ORACLE)
+                reply = reply + "\n\n---\n## 八字同题补充解读\n" + bazi_reply
+            except Exception as e:
+                reply = reply + f"\n\n（八字同题补充解读调用失败: {e}）"
+        if "six" in active_modes:
+            try:
+                if six_context:
+                    six_prompt = format_six_chat(
+                        user_query=user_input,
+                        six_context=six_context,
+                        birth_context=birth_desc if birth_desc != "无" else "",
+                    )
+                    six_reply = chat(six_prompt, system_content=SYSTEM_ORACLE)
+                    reply = reply + "\n\n---\n## 六爻同题补充解读\n" + six_reply
+                else:
+                    reply = reply + "\n\n---\n## 六爻同题补充解读\n（未设置六爻码，请先输入 /six 2 2 1 2 4 2）"
+            except Exception as e:
+                reply = reply + f"\n\n（六爻同题补充解读调用失败: {e}）"
+        if "meihua" in active_modes:
+            try:
+                meihua = calculate_meihua(user_input, datetime.now())
+                meihua_context = "\n".join(
+                    [
+                        "【梅花易数当轮起卦】",
+                        f"- 本卦: {meihua.get('base_gua', '')}",
+                        f"- 互卦: {meihua.get('mutual_gua', '')}",
+                        f"- 变卦: {meihua.get('changed_gua', '')}",
+                        f"- 动爻: {meihua.get('moving_line_name', '')}",
+                        f"- 体用: {meihua.get('relation', '')}",
+                        f"- 起卦时刻: {meihua.get('occurred_at', '')}",
+                    ]
+                )
+                meihua_prompt = format_meihua_chat(
+                    user_query=user_input,
+                    meihua_context=meihua_context,
+                    birth_context=birth_desc if birth_desc != "无" else "",
+                )
+                meihua_reply = chat(meihua_prompt, system_content=SYSTEM_ORACLE)
+                reply = reply + "\n\n---\n## 梅花同题补充解读\n" + meihua_reply
+            except Exception as e:
+                reply = reply + f"\n\n（梅花同题补充解读调用失败: {e}）"
+        # 同一问题同步提交给星相学研读
+        if "astro" in active_modes and astrology_context:
+            try:
+                astro_prompt = format_astrology_chat(
+                    user_query=user_input,
+                    astrology_context=astrology_context,
+                    birth_context=birth_desc if birth_desc != "无" else "",
+                )
+                astro_reply = chat(astro_prompt, system_content=SYSTEM_ASTRO)
+                reply = reply + "\n\n---\n## 星相学补充解读\n" + astro_reply
+            except Exception as e:
+                reply = reply + f"\n\n（星相学补充解读调用失败: {e}）"
+        if messages and messages[-1]["role"] == "assistant":
+            messages[-1]["content"] = reply
         session_lines.append("## Kimi\n" + reply + "\n")
         _echo_md(reply)
         path_md = _save_md("\n".join(session_lines), "oracle_chat")
@@ -328,6 +714,8 @@ DS-Oracle 命令行版（Kimi 最新 API，默认多轮对话）
 4. 梅花易数解读（Kimi）
 5. 姻缘分析（婚姻道路/困难挑战/伴侣性格，Kimi）
 6. 智能体多轮咨询（Kimi，保持上下文）
+7. 六爻排盘（najia）
+8. 六爻解读（Kimi）
 0. 退出
 """.format(out=out_abs)
     while True:
@@ -343,7 +731,7 @@ DS-Oracle 命令行版（Kimi 最新 API，默认多轮对话）
         # 显示主菜单
         while True:
             print(menu)
-            choice = input("请选择 [0-6]: ").strip() or "0"
+            choice = input("请选择 [0-8]: ").strip() or "0"
             if choice == "0":
                 print("再见。")
                 return
@@ -359,6 +747,10 @@ DS-Oracle 命令行版（Kimi 最新 API，默认多轮对话）
                 run_marriage_analysis()
             elif choice == "6":
                 run_oracle_chat()
+            elif choice == "7":
+                run_liuyao_draw()
+            elif choice == "8":
+                run_liuyao_reading()
             else:
                 print("无效选项。")
 

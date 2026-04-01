@@ -6,6 +6,12 @@ SYSTEM_ORACLE = (
     "不做确定性断言，不渲染灾祸，引导用户独立思考和行动。"
 )
 
+SYSTEM_ASTRO = (
+    "你是一位 data-driven 的西方占星顾问。"
+    "你优先依据结构化盘面数据（星体、宫位、相位等）做非神秘化观察，再给出可执行建议。"
+    "避免绝对化结论，不做宿命化断言，不制造焦虑。"
+)
+
 # 姻缘分析三类（与 llm_service.PROMPT_TEMPLATES 一致）
 PROMPT_MARRIAGE_PATH = "参考紫微斗数思路对命主婚姻道路进行分析，命盘如下:\n{chart}"
 PROMPT_CHALLENGES = "参考紫微斗数思路对命主与另一半的困难和挑战进行分析，命盘如下:\n{chart}"
@@ -62,3 +68,70 @@ def format_oracle_chat(user_query: str, birth_context: str = "", history_summary
     if history_summary:
         context += "对话摘要：\n" + history_summary + "\n\n"
     return PROMPT_ORACLE_CHAT.format(user_query=user_query, context=context or "（无额外上下文）")
+
+
+def format_astrology_chat(user_query: str, astrology_context: str, birth_context: str = "") -> str:
+    return (
+        "请基于以下西方星相学盘面信息，给出本轮问题的补充解读。\n"
+        "参考 kerykeion 风格：先数据观察，再建议；避免未经数据支持的夸张推断。\n"
+        f"用户问题：{user_query}\n"
+        f"出生信息：{birth_context or '未提供'}\n"
+        f"{astrology_context}\n\n"
+        "输出格式：\n"
+        "1) 星相学数据观察（3点以内）\n"
+        "2) 对当前问题的补充建议（2-3条）\n"
+        "3) 一句注意事项（避免绝对化）。"
+    )
+
+
+def format_ziwei_chat(user_query: str, ziwei_context: str, birth_context: str = "") -> str:
+    return (
+        "请基于以下紫微斗数盘面信息，围绕同一问题给出补充解读。\n"
+        f"用户问题：{user_query}\n"
+        f"出生信息：{birth_context or '未提供'}\n"
+        f"{ziwei_context}\n\n"
+        "输出格式：\n"
+        "1) 紫微观察（3点以内）\n"
+        "2) 对当前问题的补充建议（2-3条）\n"
+        "3) 一句注意事项（避免绝对化）。"
+    )
+
+
+def format_bazi_chat(user_query: str, bazi_context: str, birth_context: str = "") -> str:
+    return (
+        "请基于以下八字信息，围绕同一问题给出补充解读。\n"
+        f"用户问题：{user_query}\n"
+        f"出生信息：{birth_context or '未提供'}\n"
+        f"{bazi_context}\n\n"
+        "输出格式：\n"
+        "1) 八字观察（3点以内）\n"
+        "2) 对当前问题的补充建议（2-3条）\n"
+        "3) 一句注意事项（避免绝对化）。"
+    )
+
+
+def format_six_chat(user_query: str, six_context: str, birth_context: str = "") -> str:
+    return (
+        "请基于以下六爻上下文，围绕同一问题给出补充解读。\n"
+        "若上下文不含完整六爻盘，请先说明信息限制，再给出谨慎建议。\n"
+        f"用户问题：{user_query}\n"
+        f"出生信息：{birth_context or '未提供'}\n"
+        f"{six_context}\n\n"
+        "输出格式：\n"
+        "1) 六爻观察（3点以内）\n"
+        "2) 对当前问题的补充建议（2-3条）\n"
+        "3) 一句注意事项（避免绝对化）。"
+    )
+
+
+def format_meihua_chat(user_query: str, meihua_context: str, birth_context: str = "") -> str:
+    return (
+        "请基于以下梅花易数起卦信息，围绕同一问题给出补充解读。\n"
+        f"用户问题：{user_query}\n"
+        f"出生信息：{birth_context or '未提供'}\n"
+        f"{meihua_context}\n\n"
+        "输出格式：\n"
+        "1) 梅花观察（3点以内）\n"
+        "2) 对当前问题的补充建议（2-3条）\n"
+        "3) 一句注意事项（避免绝对化）。"
+    )

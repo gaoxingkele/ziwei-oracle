@@ -1,4 +1,3 @@
-py-iztro>=0.1.5
 kerykeion>=5.7.0
 najia
 openai>=1.0

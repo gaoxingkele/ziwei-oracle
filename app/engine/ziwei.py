@@ -4,15 +4,10 @@ from typing import Any
 from app.common.utils import parse_shichen
 from app.engine.registry import ChartRequest, ChartResult, register
 
-try:
-    from py_iztro import Astro
-except ImportError:
-    Astro = None
+from app.pureziwei import Astro
 
 @register("ziwei")
 def calculate_ziwei(req: ChartRequest) -> ChartResult:
-    if Astro is None:
-        raise RuntimeError("请先安装 py-iztro: pip install py-iztro")
     astro = Astro()
     time_idx = parse_shichen(req.birth_time)
     if time_idx is None:
