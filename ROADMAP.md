@@ -302,7 +302,7 @@ ds-oracle-cli/
 | **Phase 2** | 奇门 + 六壬 + 周易 | kin- 系列, ichingshifa | 三式排盘解读 + 卦辞原文检索 | ✅ |
 | **Phase 3** | 抽签 + 解梦 | GitHub JSON 数据 | 3 种灵签 + 33000+ 解梦条目 | ✅ |
 | **Phase 4** | 姓名学 + 面相 AI | GoodGoodName, deepface | 五格测名 (面相待定) | ✅ |
-| **Phase 5** | 太乙 + 风水 + 合婚 | kintaiyi, 自研 | 完整五术体系 | |
+| **Phase 5** | 太乙 + 风水 + 合婚 | kintaiyi, 自研 | 合婚已完成 (太乙库不可用, 风水待研) | ✅ |
 
 每个 Phase 完成后：
 1. 更新 `requirements.txt`
