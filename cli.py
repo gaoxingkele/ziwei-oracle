@@ -90,14 +90,57 @@ def _apply_mode_command(user_input: str, current_modes: set[str]) -> tuple[set[s
     return next_modes, f"模式已更新: {_format_modes(next_modes)}"
 
 
+def _hour_to_shichen(hour: int) -> int:
+    """将 0~23 小时转换为时辰序号 0~12。"""
+    if hour == 0:
+        return 0   # 早子
+    if hour == 23:
+        return 12  # 晚子
+    # 1→1(丑), 3→2(寅), 5→3(卯), 7→4(辰), 9→5(巳), 11→6(午)
+    # 13→7(未), 15→8(申), 17→9(酉), 19→10(戌), 21→11(亥)
+    return (hour + 1) // 2
+
+
 def _parse_shichen(s: str) -> int:
-    """解析时辰：数字 0~12 或 时辰名（早子/丑/寅/卯/辰/巳/午/未/申/酉/戌/亥/晚子）。"""
+    """解析时辰，支持多种格式：
+    - 时辰序号: 0~12
+    - 时辰名: 早子/丑/寅/.../亥/晚子
+    - 24小时制: 14:00, 14:30, 14
+    - 中文时间: 上午9点, 下午3点, 凌晨2点, 晚上8点
+    """
+    import re
     s = (s or "").strip()
-    if s.isdigit():
-        return max(0, min(12, int(s)))
+    if not s:
+        return 6
+
+    # 时辰名匹配
     for i, n in enumerate(_SHICHEN_ORDER):
         if n == s:
             return i
+
+    # 24小时制: "14:00", "14:30", "9:00"
+    m = re.match(r'^(\d{1,2}):(\d{2})$', s)
+    if m:
+        return _hour_to_shichen(int(m.group(1)) % 24)
+
+    # 中文时间: "上午9点", "下午3点", "凌晨2点", "晚上8点", "早上6点"
+    m = re.match(r'^(上午|早上|凌晨|下午|晚上|傍晚)(\d{1,2})点?$', s)
+    if m:
+        period, h = m.group(1), int(m.group(2))
+        if period in ("下午", "晚上", "傍晚") and 1 <= h <= 11:
+            h += 12
+        elif period == "凌晨" and h == 12:
+            h = 0
+        return _hour_to_shichen(h % 24)
+
+    # 纯数字: 先尝试当作时辰序号(0~12)，再当作小时(13~23)
+    if s.isdigit():
+        n = int(s)
+        if 0 <= n <= 12:
+            return n
+        if 13 <= n <= 23:
+            return _hour_to_shichen(n)
+
     return 6
 
 
@@ -115,7 +158,7 @@ def _parse_ziwei_inputs(skip_if_empty: bool = False):
     例：张三 1978-4-14 6 男  或  李四 2000-08-16 午 女
     返回 (date_str, time_index, gender, name)。若 skip_if_empty 且用户留空，返回 (None, None, None, None)。
     """
-    prompt = "请输入：姓名 生日 时辰 性别（空格分隔，例：张三 1978-4-14 6 男）"
+    prompt = "请输入：姓名 生日 时间 性别（空格分隔，例：张三 1978-4-14 14:00 男 或 张三 1978-4-14 下午2点 男）"
     if skip_if_empty:
         prompt += "，留空跳过"
     prompt += "："
@@ -133,7 +176,13 @@ def _parse_ziwei_inputs(skip_if_empty: bool = False):
         print("  使用默认日期:", date_str)
     time_index = _parse_shichen(shichen_raw)
     gender = _parse_gender(gender_raw)
-    print(f"  已解析：姓名 {name}，生日 {date_str}，时辰 {_SHICHEN_ORDER[time_index]}，性别 {gender}")
+    shichen_name = _SHICHEN_ORDER[time_index]
+    hour_range = [
+        "23:00-01:00", "01:00-03:00", "03:00-05:00", "05:00-07:00",
+        "07:00-09:00", "09:00-11:00", "11:00-13:00", "13:00-15:00",
+        "15:00-17:00", "17:00-19:00", "19:00-21:00", "21:00-23:00", "23:00-01:00",
+    ]
+    print(f"  已解析：姓名 {name}，生日 {date_str}，{shichen_name}时 ({hour_range[time_index]})，性别 {gender}")
     return date_str, time_index, gender, name
 
 
@@ -215,6 +264,339 @@ def _echo_md(content: str) -> None:
     print("\n" + "=" * 60 + "\n")
     print(content)
     print("\n" + "=" * 60 + "\n")
+
+
+def _ask_llm_reading(engine_name: str, text_summary: str, question: str = "") -> None:
+    """通用：展示引擎计算结果后，询问用户是否调用大模型解读。"""
+    choice = input("\n是否调用大模型进行深度解读？(y/n，默认 y): ").strip().lower()
+    if choice == "n":
+        return
+    if not question:
+        question = input("您想问的问题（留空则使用默认解读）: ").strip() or f"请对以上{engine_name}结果进行全面解读"
+    from kimi_client import chat
+    from prompts import SYSTEM_ORACLE, format_engine_reading
+    prompt = format_engine_reading(engine_name, question, text_summary)
+    print(f"正在调用大模型解读{engine_name}...")
+    try:
+        answer = chat(prompt, system_content=SYSTEM_ORACLE)
+    except Exception as e:
+        answer = f"调用失败: {e}"
+    out = f"# {engine_name}解读\n\n## 问题\n{question}\n\n## 计算结果摘要\n{text_summary[:500]}\n\n## 解读\n{answer}"
+    path_md = _save_md(out, f"{engine_name}_reading")
+    print(f"已保存: {path_md}")
+    _echo_md("## 解读\n\n" + answer)
+
+
+def run_bazi():
+    """八字排盘 + 可选大模型解读。"""
+    import importlib
+    importlib.import_module("app.engine.bazi")
+    from app.engine.registry import ChartRequest, calculate
+    import asyncio
+
+    print("【八字排盘】")
+    date_str, time_index, gender, name = _parse_ziwei_inputs()
+    req = ChartRequest(
+        system="bazi", name=name, birth_date=date_str,
+        birth_time=str(time_index), gender=gender,
+    )
+    try:
+        result = asyncio.run(calculate(req))
+    except Exception as e:
+        print(f"八字排盘失败: {e}")
+        return
+    text = result.text_summary
+    path_md = _save_md("# 八字排盘\n\n" + text, "bazi")
+    print(f"已保存: {path_md}")
+    _echo_md(text)
+    _ask_llm_reading("八字", text)
+
+
+def run_almanac():
+    """黄历查询 + 可选大模型解读。"""
+    import importlib
+    importlib.import_module("app.engine.almanac")
+    from app.engine.registry import ChartRequest, calculate
+    import asyncio
+
+    print("【黄历查询】")
+    date_str = input("查询日期 (YYYY-MM-DD，留空为今天): ").strip()
+    if not date_str:
+        date_str = datetime.now().strftime("%Y-%m-%d")
+    date_str = _normalize_birth_date(date_str) or datetime.now().strftime("%Y-%m-%d")
+    req = ChartRequest(
+        system="almanac", name="查询", birth_date=date_str,
+        birth_time="0", gender="男",
+    )
+    try:
+        result = asyncio.run(calculate(req))
+    except Exception as e:
+        print(f"黄历查询失败: {e}")
+        return
+    text = result.text_summary
+    path_md = _save_md("# 黄历查询\n\n" + text, "almanac")
+    print(f"已保存: {path_md}")
+    _echo_md(text)
+    _ask_llm_reading("黄历", text)
+
+
+def run_qimen():
+    """奇门遁甲排盘 + 可选大模型解读。"""
+    import importlib
+    importlib.import_module("app.engine.qimen")
+    from app.engine.registry import ChartRequest, calculate
+    import asyncio
+
+    print("【奇门遁甲】")
+    date_str = input("日期 (YYYY-MM-DD，留空为今天): ").strip()
+    if not date_str:
+        date_str = datetime.now().strftime("%Y-%m-%d")
+    date_str = _normalize_birth_date(date_str) or datetime.now().strftime("%Y-%m-%d")
+    time_raw = input("时辰 (0~12 或 早子/丑/.../亥/晚子，留空为当前): ").strip()
+    if not time_raw:
+        time_raw = str(datetime.now().hour // 2)
+    time_index = _parse_shichen(time_raw)
+    question = input("占问（可留空）: ").strip() or "当前时局如何"
+    req = ChartRequest(
+        system="qimen", name="占问", birth_date=date_str,
+        birth_time=str(time_index), gender="男", question=question,
+    )
+    try:
+        result = asyncio.run(calculate(req))
+    except Exception as e:
+        print(f"奇门遁甲排盘失败: {e}")
+        return
+    text = result.text_summary
+    path_md = _save_md("# 奇门遁甲\n\n" + text, "qimen")
+    print(f"已保存: {path_md}")
+    _echo_md(text)
+    _ask_llm_reading("奇门遁甲", text, question)
+
+
+def run_liuren():
+    """大六壬排盘 + 可选大模型解读。"""
+    import importlib
+    importlib.import_module("app.engine.liuren")
+    from app.engine.registry import ChartRequest, calculate
+    import asyncio
+
+    print("【大六壬】")
+    date_str = input("日期 (YYYY-MM-DD，留空为今天): ").strip()
+    if not date_str:
+        date_str = datetime.now().strftime("%Y-%m-%d")
+    date_str = _normalize_birth_date(date_str) or datetime.now().strftime("%Y-%m-%d")
+    time_raw = input("时辰 (0~12 或 早子/丑/.../亥/晚子，留空为当前): ").strip()
+    if not time_raw:
+        time_raw = str(datetime.now().hour // 2)
+    time_index = _parse_shichen(time_raw)
+    guiren = input("贵人选择 (1=昼贵 2=夜贵，默认1): ").strip() or "1"
+    question = input("占问（可留空）: ").strip() or "当前事态如何"
+    req = ChartRequest(
+        system="liuren", name="占问", birth_date=date_str,
+        birth_time=str(time_index), gender="男",
+        question=question, extra={"guiren": guiren},
+    )
+    try:
+        result = asyncio.run(calculate(req))
+    except Exception as e:
+        print(f"大六壬排盘失败: {e}")
+        return
+    text = result.text_summary
+    path_md = _save_md("# 大六壬\n\n" + text, "liuren")
+    print(f"已保存: {path_md}")
+    _echo_md(text)
+    _ask_llm_reading("大六壬", text, question)
+
+
+def run_iching():
+    """周易筮法 + 可选大模型解读。"""
+    import importlib
+    importlib.import_module("app.engine.iching")
+    from app.engine.registry import ChartRequest, calculate
+    import asyncio
+
+    print("【周易筮法】")
+    date_str = input("日期 (YYYY-MM-DD，留空为今天): ").strip()
+    if not date_str:
+        date_str = datetime.now().strftime("%Y-%m-%d")
+    date_str = _normalize_birth_date(date_str) or datetime.now().strftime("%Y-%m-%d")
+    time_raw = input("时辰 (0~12 或 早子/丑/.../亥/晚子，留空为当前): ").strip()
+    if not time_raw:
+        time_raw = str(datetime.now().hour // 2)
+    time_index = _parse_shichen(time_raw)
+    question = input("占问: ").strip() or "问前程"
+    req = ChartRequest(
+        system="iching", name="占问", birth_date=date_str,
+        birth_time=str(time_index), gender="男", question=question,
+    )
+    try:
+        result = asyncio.run(calculate(req))
+    except Exception as e:
+        print(f"周易筮法失败: {e}")
+        return
+    text = result.text_summary
+    path_md = _save_md("# 周易筮法\n\n" + text, "iching")
+    print(f"已保存: {path_md}")
+    _echo_md(text)
+    _ask_llm_reading("周易", text, question)
+
+
+def run_qianwen():
+    """求签（观音/黄大仙/诸葛）+ 可选大模型解读。"""
+    import importlib
+    importlib.import_module("app.engine.qianwen")
+    from app.engine.registry import ChartRequest, calculate
+    import asyncio
+
+    print("【求签】")
+    print("  1. 观音灵签 (98签)")
+    print("  2. 黄大仙灵签 (100签)")
+    print("  3. 诸葛神算 (384签)")
+    type_choice = input("选择签种 (1/2/3，默认1): ").strip() or "1"
+    type_map = {"1": "guanyin", "2": "huangdaxian", "3": "zhuge"}
+    qtype = type_map.get(type_choice, "guanyin")
+    question = input("心中所问（可留空）: ").strip() or "求一签"
+    req = ChartRequest(
+        system="qianwen", name="求签", birth_date=datetime.now().strftime("%Y-%m-%d"),
+        birth_time="0", gender="男", question=question,
+        extra={"type": qtype},
+    )
+    try:
+        result = asyncio.run(calculate(req))
+    except Exception as e:
+        print(f"求签失败: {e}")
+        return
+    text = result.text_summary
+    path_md = _save_md("# 求签\n\n" + text, "qianwen")
+    print(f"已保存: {path_md}")
+    _echo_md(text)
+    _ask_llm_reading("灵签", text, question)
+
+
+def run_jiemeng():
+    """周公解梦 + 可选大模型解读。"""
+    import importlib
+    importlib.import_module("app.engine.jiemeng")
+    from app.engine.registry import ChartRequest, calculate
+    import asyncio
+
+    print("【周公解梦】")
+    keyword = input("梦境关键词 (如：蛇、飞、水): ").strip()
+    if not keyword:
+        print("请输入梦境关键词。")
+        return
+    req = ChartRequest(
+        system="jiemeng", name="解梦", birth_date=datetime.now().strftime("%Y-%m-%d"),
+        birth_time="0", gender="男", question=keyword,
+    )
+    try:
+        result = asyncio.run(calculate(req))
+    except Exception as e:
+        print(f"解梦查询失败: {e}")
+        return
+    text = result.text_summary
+    path_md = _save_md("# 周公解梦\n\n" + text, "jiemeng")
+    print(f"已保存: {path_md}")
+    _echo_md(text)
+    _ask_llm_reading("解梦", text, f"梦见{keyword}是什么含义")
+
+
+def run_name_analysis():
+    """姓名五格分析 + 可选大模型解读。"""
+    import importlib
+    importlib.import_module("app.engine.name_analysis")
+    from app.engine.registry import ChartRequest, calculate
+    import asyncio
+
+    print("【姓名五格分析】")
+    name = input("请输入姓名 (如：张三丰): ").strip()
+    if not name:
+        print("请输入姓名。")
+        return
+    req = ChartRequest(
+        system="name_analysis", name=name,
+        birth_date="2000-01-01", birth_time="0", gender="男",
+    )
+    try:
+        result = asyncio.run(calculate(req))
+    except Exception as e:
+        print(f"姓名分析失败: {e}")
+        return
+    text = result.text_summary
+    path_md = _save_md("# 姓名五格分析\n\n" + text, "name_analysis")
+    print(f"已保存: {path_md}")
+    _echo_md(text)
+    _ask_llm_reading("姓名五格", text)
+
+
+def run_jiri():
+    """黄道吉日查询 + 可选大模型解读。"""
+    import importlib
+    importlib.import_module("app.engine.jiri")
+    from app.engine.registry import ChartRequest, calculate
+    import asyncio
+
+    print("【黄道吉日查询】")
+    activity = input("查询事项 (如：结婚/搬家/开业/出行/动土): ").strip()
+    if not activity:
+        print("请输入查询事项。")
+        return
+    start = input("起始日期 (YYYY-MM-DD，留空为今天): ").strip()
+    if not start:
+        start = datetime.now().strftime("%Y-%m-%d")
+    start = _normalize_birth_date(start) or datetime.now().strftime("%Y-%m-%d")
+    end = input("截止日期 (YYYY-MM-DD，留空为起始日期后30天): ").strip()
+    if end:
+        end = _normalize_birth_date(end) or ""
+    req = ChartRequest(
+        system="jiri", name="吉日查询",
+        birth_date=start, birth_time="0", gender="男",
+        question=activity,
+        extra={"start_date": start, "end_date": end} if end else {"start_date": start},
+    )
+    try:
+        result = asyncio.run(calculate(req))
+    except Exception as e:
+        print(f"吉日查询失败: {e}")
+        return
+    text = result.text_summary
+    path_md = _save_md("# 黄道吉日查询\n\n" + text, "jiri")
+    print(f"已保存: {path_md}")
+    _echo_md(text)
+    _ask_llm_reading("黄道吉日", text, f"从以上吉日中推荐最适合{activity}的日子")
+
+
+def run_hehun():
+    """八字合婚 + 可选大模型解读。"""
+    import importlib
+    importlib.import_module("app.engine.hehun")
+    from app.engine.registry import ChartRequest, calculate
+    import asyncio
+
+    print("【八字合婚】")
+    print("请输入甲方信息：")
+    date_a, time_a, gender_a, name_a = _parse_ziwei_inputs()
+    print("请输入乙方信息：")
+    date_b, time_b, gender_b, name_b = _parse_ziwei_inputs()
+    req = ChartRequest(
+        system="hehun", name=name_a, birth_date=date_a,
+        birth_time=str(time_a), gender=gender_a,
+        extra={
+            "spouse_birth_date": date_b,
+            "spouse_birth_time": str(time_b),
+            "spouse_gender": gender_b,
+        },
+    )
+    try:
+        result = asyncio.run(calculate(req))
+    except Exception as e:
+        print(f"合婚分析失败: {e}")
+        return
+    text = result.text_summary
+    path_md = _save_md("# 八字合婚\n\n" + text, "hehun")
+    print(f"已保存: {path_md}")
+    _echo_md(text)
+    _ask_llm_reading("八字合婚", text)
 
 
 def run_ziwei_chart():
@@ -708,15 +1090,30 @@ def main():
     menu = """
 DS-Oracle 命令行版（Kimi 最新 API，默认多轮对话）
 排盘文本与图片保存到: {out}
-1. 紫微排盘（文本 + PNG 图）
-2. 梅花易数起卦
-3. 紫微长线解读（Kimi）
-4. 梅花易数解读（Kimi）
-5. 姻缘分析（婚姻道路/困难挑战/伴侣性格，Kimi）
-6. 智能体多轮咨询（Kimi，保持上下文）
-7. 六爻排盘（najia）
-8. 六爻解读（Kimi）
-0. 退出
+
+── 排盘与解读 ──
+ 1. 紫微排盘（文本 + PNG 图）
+ 2. 梅花易数起卦
+ 3. 紫微长线解读（Kimi）
+ 4. 梅花易数解读（Kimi）
+ 5. 姻缘分析（婚姻道路/困难挑战/伴侣性格，Kimi）
+ 6. 智能体多轮咨询（Kimi，保持上下文）
+ 7. 六爻排盘（najia）
+ 8. 六爻解读（Kimi）
+
+── 更多功能 ──
+ 9. 八字排盘
+10. 黄历查询
+11. 奇门遁甲
+12. 大六壬
+13. 周易筮法
+14. 求签（观音/黄大仙/诸葛）
+15. 周公解梦
+16. 姓名五格分析
+17. 八字合婚
+18. 黄道吉日查询
+
+ 0. 退出
 """.format(out=out_abs)
     while True:
         # 默认启动多轮对话：回车直接进入 6，输入 m 显示菜单
@@ -731,7 +1128,7 @@ DS-Oracle 命令行版（Kimi 最新 API，默认多轮对话）
         # 显示主菜单
         while True:
             print(menu)
-            choice = input("请选择 [0-8]: ").strip() or "0"
+            choice = input("请选择 [0-18]: ").strip() or "0"
             if choice == "0":
                 print("再见。")
                 return
@@ -751,6 +1148,26 @@ DS-Oracle 命令行版（Kimi 最新 API，默认多轮对话）
                 run_liuyao_draw()
             elif choice == "8":
                 run_liuyao_reading()
+            elif choice == "9":
+                run_bazi()
+            elif choice == "10":
+                run_almanac()
+            elif choice == "11":
+                run_qimen()
+            elif choice == "12":
+                run_liuren()
+            elif choice == "13":
+                run_iching()
+            elif choice == "14":
+                run_qianwen()
+            elif choice == "15":
+                run_jiemeng()
+            elif choice == "16":
+                run_name_analysis()
+            elif choice == "17":
+                run_hehun()
+            elif choice == "18":
+                run_jiri()
             else:
                 print("无效选项。")
 

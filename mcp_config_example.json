@@ -1,0 +1,45 @@
+{
+  "_comment": "DS-Oracle MCP 客户端配置示例",
+
+  "_usage_1": "=== Claude Desktop / 小龙虾等 MCP 客户端 ===",
+  "_usage_2": "将下方 mcpServers 部分复制到客户端配置中即可",
+
+  "mcpServers": {
+    "ds-oracle": {
+      "url": "http://your-server:8811/mcp",
+      "_note": "streamable-http 模式，修改 your-server 为实际服务器地址"
+    }
+  },
+
+  "_usage_3": "=== 本地 stdio 模式（Claude Desktop 本地使用）===",
+  "mcpServers_stdio": {
+    "ds-oracle": {
+      "command": "python",
+      "args": ["mcp_server.py", "--transport", "stdio"],
+      "cwd": "/path/to/ds-oracle-cli"
+    }
+  },
+
+  "_usage_4": "=== 启动服务器 ===",
+  "_start_cmd_1": "python mcp_server.py                          # 默认 streamable-http, 0.0.0.0:8811",
+  "_start_cmd_2": "python mcp_server.py --port 9000               # 自定义端口",
+  "_start_cmd_3": "python mcp_server.py --transport sse            # SSE 模式",
+  "_start_cmd_4": "python mcp_server.py --transport stdio          # stdio 模式",
+
+  "_available_tools": [
+    "ziwei       — 紫微斗数排盘",
+    "bazi        — 八字排盘（四柱八字）",
+    "meihua      — 梅花易数起卦",
+    "liuyao      — 六爻排盘（纳甲法）",
+    "astrology   — 西方占星术星盘",
+    "qimen       — 奇门遁甲排盘",
+    "liuren      — 大六壬排盘",
+    "iching      — 周易筮法（大衍筮法）",
+    "qianwen     — 求签（观音/黄大仙/诸葛）",
+    "jiemeng     — 周公解梦",
+    "name_analysis — 姓名五格分析",
+    "hehun       — 八字合婚",
+    "almanac     — 黄历查询",
+    "jiri        — 黄道吉日查询"
+  ]
+}

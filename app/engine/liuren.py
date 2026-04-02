@@ -9,6 +9,12 @@ from kinliuren.kinliuren import Liuren
 
 SHICHEN_ZHI = ["子", "丑", "寅", "卯", "辰", "巳", "午", "未", "申", "酉", "戌", "亥"]
 
+# kinliuren 库节气名为繁体，lunar 库输出简体，需要映射
+_JIEQI_S2T = {
+    "惊蛰": "驚蟄", "谷雨": "穀雨", "小满": "小滿",
+    "芒种": "芒種", "处暑": "處暑",
+}
+
 
 @register("liuren")
 def calculate_liuren(req: ChartRequest) -> ChartResult:
@@ -17,7 +23,8 @@ def calculate_liuren(req: ChartRequest) -> ChartResult:
     s = Solar.fromYmd(year, month, day)
     lunar = s.getLunar()
 
-    jieqi = lunar.getPrevJie().getName()
+    jieqi_raw = lunar.getPrevJie().getName()
+    jieqi = _JIEQI_S2T.get(jieqi_raw, jieqi_raw)
     month_zhi = lunar.getMonthZhi()
     day_gangzhi = lunar.getDayInGanZhi()
 

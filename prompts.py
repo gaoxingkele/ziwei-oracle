@@ -124,6 +124,28 @@ def format_six_chat(user_query: str, six_context: str, birth_context: str = "") 
     )
 
 
+# 通用引擎解读（用于 bazi/almanac/qimen/liuren/iching/qianwen/jiemeng/name_analysis/hehun 等）
+PROMPT_ENGINE_READING = """你是一位精通东方命理与传统文化的智慧顾问。请基于以下{engine_name}的计算结果进行深度解读。
+禁止宿命化和灾祸渲染，用现代语言表达传统智慧，强调可执行建议。
+
+用户问题：{question}
+
+{engine_name}计算结果：
+{chart_summary}
+
+请给出：
+1) 核心解读（结合{engine_name}原理，用现代语言阐述）
+2) 关键要点（3-5条）
+3) 行动建议（2-3条具体可执行的建议）
+4) 一句注意事项（避免绝对化）"""
+
+
+def format_engine_reading(engine_name: str, question: str, chart_summary: str) -> str:
+    return PROMPT_ENGINE_READING.format(
+        engine_name=engine_name, question=question, chart_summary=chart_summary,
+    )
+
+
 def format_meihua_chat(user_query: str, meihua_context: str, birth_context: str = "") -> str:
     return (
         "请基于以下梅花易数起卦信息，围绕同一问题给出补充解读。\n"
