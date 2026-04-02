@@ -29,3 +29,6 @@ ASTRO_TZ_STR = _str("ASTRO_TZ_STR", "Asia/Shanghai")
 OUTPUT_DIR = _str("ZIWEI_OUTPUT_DIR") or str((Path.cwd() / "output").resolve())
 STORAGE_TYPE = _str("STORAGE_TYPE", "local")
 CORS_ORIGINS = [o.strip() for o in _str("CORS_ORIGINS", "*").split(",") if o.strip()]
+
+# API Token 认证（免登录模式，多个 token 逗号分隔）
+API_TOKENS = [t.strip() for t in _str("API_TOKENS", "").split(",") if t.strip()]
