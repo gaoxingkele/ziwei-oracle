@@ -25,11 +25,16 @@ _WUXING = {
     "土": {"土": "比和", "水": "体克用", "金": "体生用", "木": "用克体", "火": "用生体"},
 }
 
-def _calc(topic: str, t: datetime) -> dict[str, Any]:
-    y, m, d, h = t.year, t.month, t.day, t.hour
-    up_idx = (y + m + d) % 8 or 8
-    lo_idx = (y + m + d + h) % 8 or 8
-    mv = (y + m + d + h) % 6 or 6
+def _calc(topic: str, t: datetime, numbers: list[int] | None = None) -> dict[str, Any]:
+    if numbers and len(numbers) >= 3:
+        up_idx = numbers[0] % 8 or 8
+        lo_idx = numbers[1] % 8 or 8
+        mv = numbers[2] % 6 or 6
+    else:
+        y, m, d, h = t.year, t.month, t.day, t.hour
+        up_idx = (y + m + d) % 8 or 8
+        lo_idx = (y + m + d + h) % 8 or 8
+        mv = (y + m + d + h) % 6 or 6
     up, lo = TRIGRAMS[up_idx], TRIGRAMS[lo_idx]
     base = list(lo.lines + up.lines)
     hu_lo = _BY_LINES[tuple(base[1:4])]; hu_up = _BY_LINES[tuple(base[2:5])]
@@ -49,7 +54,8 @@ def _calc(topic: str, t: datetime) -> dict[str, Any]:
 @register("meihua")
 def calculate_meihua_engine(req: ChartRequest) -> ChartResult:
     now = datetime.now()
-    data = _calc(topic=req.question or "综合", t=now)
+    numbers = req.extra.get("numbers") if req.extra else None
+    data = _calc(topic=req.question or "综合", t=now, numbers=numbers)
     text = (
         f"本卦: {data['base_gua']}, 互卦: {data['mutual_gua']}, "
         f"变卦: {data['changed_gua']}, 动爻: {data['moving_line_name']}, "

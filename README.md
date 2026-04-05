@@ -1,10 +1,10 @@
 # DS-Oracle
 
-中华术数综合平台 — FastAPI 后端 + MCP Server + CLI 客户端，集成 14 个命理/卜筮/相术引擎。
+中华术数综合平台 — FastAPI 后端 + MCP Server + CLI 客户端，集成 15 个命理/卜筮/相术引擎。
 
 ## 功能总览
 
-### 命理引擎（14 个）
+### 命理引擎（15 个）
 
 | 引擎 | 系统名 | 说明 | 依赖 |
 |------|--------|------|------|
@@ -14,6 +14,7 @@
 | 黄道吉日 | `jiri` | 按事项+日期范围检索吉日，支持口语别名(结婚→嫁娶等) | app/lunar（本地） |
 | 梅花易数 | `meihua` | 时间起卦、互卦/变卦、体用关系、五行生克 | 无 |
 | 六爻占卜 | `liuyao` | 纳甲装卦、世应/六神/六亲 | app/najia（本地） |
+| 六爻自动起卦 | `liuyao_qigua` | 系统自动摇卦生成爻码，调用六爻引擎解读 | app/najia（本地） |
 | 西洋占星 | `astrology` | 本命盘、行星宫位、SVG 星盘图 | kerykeion |
 | 奇门遁甲 | `qimen` | 时家/日家排盘、天地盘、八门九星八神 | kinqimen |
 | 大六壬 | `liuren` | 四课三传、天地盘、格局分类 | kinliuren |
@@ -39,7 +40,7 @@ Token 认证，免登录。适合微信小程序、H5 页面、后端服务集�
 
 ### 2. MCP Server（大模型工具调用）
 
-通过 MCP 协议暴露 14 个 Tools，大模型（Claude Desktop / 小龙虾等客户端）可直接调用精准计算。
+通过 MCP 协议暴露 15 个 Tools，大模型（Claude Desktop / 小龙虾等客户端）可直接调用精准计算。
 
 ### 3. CLI 命令行（本地使用）
 
@@ -173,7 +174,7 @@ Swagger 文档：`http://localhost:8000/docs`
 
 ## MCP Server
 
-将 14 个引擎作为 MCP Tools 暴露，大模型可直接调用获取精准计算结果。
+将 15 个引擎作为 MCP Tools 暴露，大模型可直接调用获取精准计算结果。
 
 ### 启动
 
@@ -225,8 +226,9 @@ stdio 模式（本地）：
 | `ziwei` | 紫微斗数排盘 | name, birth_date, birth_time, gender |
 | `bazi` | 八字排盘 | name, birth_date, birth_time, gender |
 | `astrology` | 西方星盘 | name, birth_date, birth_time, gender |
-| `meihua` | 梅花易数 | question |
+| `meihua` | 梅花易数（"算一卦"默认） | question, numbers?(3个数字) |
 | `liuyao` | 六爻排盘 | yao_codes |
+| `liuyao_qigua` | 六爻自动起卦 | question? |
 | `qimen` | 奇门遁甲 | - |
 | `liuren` | 大六壬 | - |
 | `iching` | 周易筮法 | question |
@@ -375,7 +377,7 @@ ds-oracle-cli/
 │   │   ├── chart.py          #   排盘接口（通用 + 14个便捷接口）
 │   │   ├── almanac.py        #   GET /almanac/today|{date}
 │   │   └── auth.py           #   SMS 登录
-│   ├── engine/               # 命理引擎（14 个）
+│   ├── engine/               # 命理引擎（15 个）
 │   │   ├── registry.py       #   引擎注册器 + ChartRequest/ChartResult
 │   │   ├── ziwei.py ~ hehun.py
 │   │   └── jiri.py           #   黄道吉日查询
@@ -385,7 +387,7 @@ ds-oracle-cli/
 │   ├── data/                 # 静态数据（签文/解梦/笔画）
 │   ├── auth/                 # JWT + SMS 认证
 │   └── common/               # 异常、响应、工具函数
-├── mcp_server.py             # MCP Server（14 Tools）
+├── mcp_server.py             # MCP Server（15 Tools）
 ├── cli.py                    # CLI 交互入口（18项菜单）
 ├── config.py                 # CLI 配置
 ├── prompts.py                # LLM 提示词模板
@@ -432,11 +434,14 @@ python test_all_engines.py
 
 | Tool | 语音/文字指令示例 |
 |------|-----------------|
-| `meihua` | "帮我起一卦"、"梅花易数测一下面试能不能过"、"占一卦看看最近运势" |
-| `liuyao` | "帮我排个六爻"、"用六爻看看这件事"、"纳甲起卦问财运" |
-| `iching` | "用周易帮我算一卦"、"帮我占个卦问问工作"、"起一卦看看前程" |
+| `meihua` | "帮我算一卦"（默认）、"报三个数字 5、3、2 算一卦"、"梅花易数测一下面试能不能过"、"我说三个数 7 2 4 帮我起卦" |
+| `liuyao` | "帮我排个六爻"、"我摇了铜钱结果是 1 2 1 3 2 1"、"纳甲起卦问财运" |
+| `liuyao_qigua` | "帮我起六爻卦"、"六爻卦"、"帮我摇一卦"、"我没铜钱帮我起个卦"、"系统帮我摇卦" |
+| `iching` | "用周易帮我算一卦"、"帮我占个卦问问工作"、"大衍筮法起一卦" |
 | `qimen` | "排个奇门遁甲"、"奇门看看今天时局"、"帮我起个奇门局" |
 | `liuren` | "起个大六壬"、"六壬看看这件事"、"帮我排个六壬课" |
+
+> **路由说明**：用户说"帮我算一卦"且未特指六爻时，默认走 `meihua`（梅花易数），提示用户报 3 个数字（上卦/下卦/动爻）；说"帮我起六爻卦"或"六爻卦"则走 `liuyao_qigua` 自动摇卦；用户已有爻码（如铜钱结果）则走 `liuyao`。
 
 ### 日常查询
 

@@ -144,22 +144,29 @@ async def bazi(
 @mcp.tool()
 async def meihua(
     question: str,
+    numbers: list[int] | None = None,
     birth_date: str = "",
     birth_time: str = "",
 ) -> str:
-    """梅花易数起卦。根据时间起卦，得到本卦、互卦、变卦和体用关系。
+    """梅花易数起卦。用户报3个数字起卦，或根据时间自动起卦。得到本卦、互卦、变卦和体用关系。
+    这是"帮我算一卦"的默认工具（除非用户明确要求六爻）。
 
     Args:
         question: 占题/所问之事，如"本周面试能否通过"
+        numbers: 用户报的3个数字，分别用于上卦、下卦、动爻。如[5,3,2]。留空则按时间自动起卦
         birth_date: 起卦日期 YYYY-MM-DD，留空为当天
         birth_time: 起卦时间，留空为当前时辰
     """
     from datetime import datetime
     if not birth_date:
         birth_date = datetime.now().strftime("%Y-%m-%d")
+    extra = {}
+    if numbers and len(numbers) >= 3:
+        extra["numbers"] = numbers
     return await _call_engine(
         "meihua", name="占问", birth_date=birth_date,
         birth_time=_parse_time(birth_time), gender="男", question=question,
+        extra=extra,
     )
 
 
@@ -186,6 +193,45 @@ async def liuyao(
         birth_time="6", gender=gender, question=question,
         extra={"yao_codes": yao_codes},
     )
+
+
+@mcp.tool()
+async def liuyao_qigua(
+    question: str = "",
+    gender: str = "男",
+) -> str:
+    """六爻起卦（自动摇卦）。系统自动模拟摇铜钱六次生成卦象，并进行六爻解读。
+    适用于用户没有铜钱、不知道爻码，想让系统帮忙起卦的场景。
+
+    Args:
+        question: 占题/所问之事，如"最近工作能否顺利"
+        gender: 性别，男 或 女，默认男
+    """
+    import hashlib
+    import time
+    from datetime import datetime
+
+    # 以当前时间戳为种子，生成6个爻码
+    ts = time.time_ns()
+    yao_codes = []
+    for i in range(6):
+        seed = f"{ts}-yao-{i}"
+        h = int(hashlib.sha256(seed.encode()).hexdigest(), 16)
+        yao_codes.append(h % 4 + 1)  # 1=少阳 2=少阴 3=老阳 4=老阴
+
+    yao_names = {1: "少阳 ⚊", 2: "少阴 ⚋", 3: "老阳 ⚊→⚋(动)", 4: "老阴 ⚋→⚊(动)"}
+    shake_detail = "\n".join(
+        f"  第{i+1}爻: {yao_names[c]}" for i, c in enumerate(yao_codes)
+    )
+
+    birth_date = datetime.now().strftime("%Y-%m-%d")
+    result = await _call_engine(
+        "liuyao", name="占问", birth_date=birth_date,
+        birth_time="6", gender=gender, question=question,
+        extra={"yao_codes": yao_codes},
+    )
+
+    return f"【自动摇卦结果】\n{shake_detail}\n爻码: {yao_codes}\n\n{result}"
 
 
 @mcp.tool()

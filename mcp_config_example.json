@@ -31,6 +31,7 @@
     "bazi        — 八字排盘（四柱八字）",
     "meihua      — 梅花易数起卦",
     "liuyao      — 六爻排盘（纳甲法）",
+    "liuyao_qigua — 六爻自动起卦（系统摇卦）",
     "astrology   — 西方占星术星盘",
     "qimen       — 奇门遁甲排盘",
     "liuren      — 大六壬排盘",
