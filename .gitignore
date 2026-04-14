@@ -6,6 +6,9 @@
 # 输出目录
 output/
 
+# 审计日志（按 user_id / 日期分片）
+logs/
+
 # Python
 __pycache__/
 *.py[cod]

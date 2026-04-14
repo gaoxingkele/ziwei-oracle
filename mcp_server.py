@@ -154,9 +154,41 @@ DS-Oracle 是一套东方命理计算工具集（15个工具），你是这套�
 
 async def _call_engine(system: str, **kwargs) -> str:
     """统一调用引擎并返回 text_summary。"""
-    req = ChartRequest(system=system, **kwargs)
-    result = await engine_calculate(req)
-    return result.text_summary
+    import os
+    import time
+    from app.common import audit_log
+
+    user_id = os.getenv("MCP_USER_ID") or "mcp_anonymous"
+    trace_id = audit_log.new_trace_id()
+    tokens = audit_log.set_context(user_id=user_id, trace_id=trace_id)
+    start = time.perf_counter()
+    audit_log.log_event(
+        user_id, "mcp_tool_in", trace_id=trace_id,
+        system=system,
+        params={k: v for k, v in kwargs.items() if k != "extra"},
+        extra=kwargs.get("extra") or {},
+    )
+    try:
+        req = ChartRequest(system=system, **kwargs)
+        result = await engine_calculate(req)
+    except Exception as exc:
+        audit_log.log_event(
+            user_id, "mcp_tool_error", level="ERROR", trace_id=trace_id,
+            system=system, error_type=type(exc).__name__, error=str(exc),
+            duration_ms=int((time.perf_counter() - start) * 1000),
+        )
+        audit_log.reset_context(tokens)
+        raise
+    summary = result.text_summary
+    audit_log.log_event(
+        user_id, "mcp_tool_out", trace_id=trace_id,
+        system=system, chart_id=result.chart_id,
+        summary_len=len(summary),
+        summary_preview=summary[:300],
+        duration_ms=int((time.perf_counter() - start) * 1000),
+    )
+    audit_log.reset_context(tokens)
+    return summary
 
 
 # ══════════════════════════════════════════════

@@ -232,7 +232,11 @@ stdio 模式（本地）：
 | `qimen` | 奇门遁甲 | - |
 | `liuren` | 大六壬 | - |
 | `iching` | 周易筮法 | question |
-| `qianwen` | 求签 | - |
+| `qianwen` | 求签（通用入口，可切签种） | sign_type?(guanyin/huangdaxian/zhuge/mazu) |
+| `qianwen_guanyin` | 观音灵签（100 签） | question? |
+| `qianwen_huangdaxian` | 黄大仙灵签（100 签） | question? |
+| `qianwen_zhuge` | 诸葛神算（384 签） | question? |
+| `qianwen_mazu` | 妈祖六十甲子签（60 签） | question? |
 | `jiemeng` | 周公解梦 | keyword |
 | `name_analysis` | 姓名五格 | name |
 | `hehun` | 八字合婚 | 甲乙双方出生信息 |
@@ -363,8 +367,46 @@ python test_all_engines.py
 | `CORS_ORIGINS` | CORS 允许的域名 | * |
 | `ASTRO_CITY` | 占星默认城市 | Beijing |
 | `OUTPUT_DIR` | 文件输出目录 | output |
+| `AUDIT_LOG_ROOT` | 审计日志根目录 | logs |
+| `AUDIT_LOG_RETAIN_DAYS` | 每用户日志保留天数 | 30 |
+| `MCP_USER_ID` | MCP 调用默认用户标识（未设则 mcp_anonymous） | -- |
 
 完整变量列表见 `.env.example`。
+
+## 审计日志
+
+所有设备请求、LLM 请求/响应、引擎调用、错误/警告，按 **用户 ID + 日期** 分片写入 JSONL，方便调试和追溯。
+
+- **路径**：`logs/{user_id}/{YYYY-MM-DD}.jsonl`（目录由 `AUDIT_LOG_ROOT` 配置，默认 `logs/`）
+- **保留**：每个用户保留最近 `AUDIT_LOG_RETAIN_DAYS` 天（默认 30 天），自动清理
+- **格式**：每行一个 JSON 对象，含 `ts` / `level` / `event` / `user_id` / `trace_id` 及事件相关字段
+
+### 用户 ID 识别策略
+- **REST API**：JWT `sub` 优先 → API Token 末 8 位 → `X-Device-Id` / `X-User-Id` 头 → query `token` → `anonymous`
+- **MCP**：`MCP_USER_ID` 环境变量，默认 `mcp_anonymous`（不同客户端可用不同值隔离日志）
+- **CLI**：当前不写入审计日志（交互本地日志）
+
+### 事件类型
+| Event | 来源 | 说明 |
+|-------|------|------|
+| `request_in` / `response_out` | FastAPI 中间件 | 入站请求及响应状态/耗时 |
+| `request_error` / `oracle_error` | FastAPI 中间件/异常处理 | 未捕获异常 / 业务异常 |
+| `mcp_tool_in` / `mcp_tool_out` / `mcp_tool_error` | `_call_engine` | 工具调用参数、摘要预览、耗时 |
+| `llm_request` / `llm_response` / `llm_error` | `kimi_client` | 模型、消息数、token 消耗、耗时、预览 |
+
+同一次请求的所有事件共享 `trace_id`（FastAPI 请求或 MCP 工具调用开始时生成），LLM 调用通过 `contextvars` 自动继承。
+
+### 查看示例
+```bash
+# 查看某用户今天所有事件
+cat logs/user_8888/$(date +%F).jsonl | jq .
+
+# 只看 LLM 请求和响应
+grep -E '"event":"llm_' logs/user_8888/$(date +%F).jsonl | jq .
+
+# 按 trace_id 串联一次完整链路
+grep '"trace_id":"abc123def456"' logs/user_8888/$(date +%F).jsonl | jq .
+```
 
 ## 项目结构
 
@@ -386,7 +428,7 @@ ds-oracle-cli/
 │   ├── najia/                # 六爻纳甲装卦库
 │   ├── data/                 # 静态数据（签文/解梦/笔画）
 │   ├── auth/                 # JWT + SMS 认证
-│   └── common/               # 异常、响应、工具函数
+│   └── common/               # 异常、响应、工具函数、审计日志（audit_log.py）
 ├── mcp_server.py             # MCP Server（15 Tools）
 ├── cli.py                    # CLI 交互入口（18项菜单）
 ├── config.py                 # CLI 配置
