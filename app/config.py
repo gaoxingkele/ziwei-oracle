@@ -10,6 +10,8 @@ def _str(key: str, default: str = "") -> str:
     return (os.getenv(key) or default).strip()
 
 DATABASE_URL = _str("DATABASE_URL", "postgresql+asyncpg://oracle:oracle123@localhost:5432/ds_oracle")
+# 设置表默认用 SQLite（零依赖），生产可切到 Postgres：sqlite+aiosqlite:///./ds_oracle.db 或 postgresql+asyncpg://...
+SETTINGS_DB_URL = _str("SETTINGS_DB_URL", "sqlite+aiosqlite:///./ds_oracle.db")
 REDIS_URL = _str("REDIS_URL", "redis://localhost:6379/0")
 JWT_SECRET = _str("JWT_SECRET", "change-me-in-production")
 JWT_ACCESS_EXPIRE_MINUTES = int(_str("JWT_ACCESS_EXPIRE_MINUTES", "120"))

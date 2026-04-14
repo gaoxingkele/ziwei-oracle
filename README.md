@@ -104,7 +104,7 @@ POST /api/v1/chart/{system}
 | POST | `/api/v1/chart/qimen/calc` | 奇门遁甲 | question?, birth_date?, birth_time? |
 | POST | `/api/v1/chart/liuren/calc` | 大六壬 | question?, birth_date?, birth_time?, guiren?(1/2) |
 | POST | `/api/v1/chart/iching/calc` | 周易筮法 | question, birth_date?, birth_time? |
-| POST | `/api/v1/chart/qianwen/calc` | 求签 | sign_type?(guanyin/huangdaxian/zhuge), question? |
+| POST | `/api/v1/chart/qianwen/calc` | 求签 | sign_type?(guanyin/huangdaxian/zhuge/mazu), question? |
 | POST | `/api/v1/chart/jiemeng/calc` | 周公解梦 | keyword |
 | POST | `/api/v1/chart/name/calc` | 姓名五格 | name |
 | POST | `/api/v1/chart/hehun/calc` | 八字合婚 | name_a, birth_date_a, birth_time_a, gender_a, name_b, birth_date_b, birth_time_b, gender_b |
@@ -112,6 +112,27 @@ POST /api/v1/chart/{system}
 | POST | `/api/v1/chart/jiri/calc` | 黄道吉日 | activity, start_date?, end_date? |
 | GET | `/api/v1/almanac/today` | 今日黄历 | - |
 | GET | `/api/v1/almanac/{date}` | 指定日期黄历 | - |
+
+#### 设备设置接口（LLM 语义校准 + 持久化）
+
+设备端把语音识别文本原样 POST 上来，服务器调 LLM 解析成规范化格式，写入 SQLite（按 `device_id` 键），并回传给设备端缓存。全部使用 `device_id` 作为用户主键。
+
+| 方法 | 路径 | 说明 | 输入示例 → 输出 |
+|------|------|------|----------------|
+| POST | `/api/v1/setting/birthday` | 生日 | "一九七零年四月十号" → `"1970-04-10"` |
+| POST | `/api/v1/setting/birthtime` | 出生时间（24h） | "早上七点四十"/"辰时" → `"07:40"` |
+| POST | `/api/v1/setting/city` | 出生地点 | "福建永安" → `"福建省永安市"` |
+| POST | `/api/v1/setting/name` | 姓名（支持拆字） | "姓双木林、名字叫平凡的凡" → `"林凡"` |
+| POST | `/api/v1/setting/sex` | 性别 | "男"/"male"/"1" → `1`（女 → `0`） |
+| GET | `/api/v1/setting?device_id=xxx` | 读取全部设置 | - |
+
+请求体：`{"device_id": "dev_xxx", "text": "用户原始输入"}`（name 额外支持 `lang: "zh"` / `"en"`，默认 `zh`）。
+
+设计要点：
+- **容错**：先走正则快速匹配（如已是 `1970-04-10`、`07:40`、`男`），未命中才调 LLM，降低延迟和 token 成本
+- **LLM 后备**：prompt 要求严格 JSON 输出，解析失败返回错误码 `40001`
+- **数据库**：默认 SQLite（`ds_oracle.db`，零配置），通过 `SETTINGS_DB_URL` 可切换到 PostgreSQL
+- **审计日志**：`setting_update` 事件记录原始输入、解析值、错误原因，归到该 `device_id` 目录下
 
 参数带 `?` 表示可选，留空自动取当天/当前时间。
 
@@ -370,6 +391,7 @@ python test_all_engines.py
 | `AUDIT_LOG_ROOT` | 审计日志根目录 | logs |
 | `AUDIT_LOG_RETAIN_DAYS` | 每用户日志保留天数 | 30 |
 | `MCP_USER_ID` | MCP 调用默认用户标识（未设则 mcp_anonymous） | -- |
+| `SETTINGS_DB_URL` | 设置表数据库连接（默认 SQLite） | sqlite+aiosqlite:///./ds_oracle.db |
 
 完整变量列表见 `.env.example`。
 
@@ -418,6 +440,7 @@ ds-oracle-cli/
 │   ├── api/v1/               # API 路由
 │   │   ├── chart.py          #   排盘接口（通用 + 14个便捷接口）
 │   │   ├── almanac.py        #   GET /almanac/today|{date}
+│   │   ├── setting.py        #   设备设置接口（LLM 语义校准）
 │   │   └── auth.py           #   SMS 登录
 │   ├── engine/               # 命理引擎（15 个）
 │   │   ├── registry.py       #   引擎注册器 + ChartRequest/ChartResult
@@ -428,6 +451,8 @@ ds-oracle-cli/
 │   ├── najia/                # 六爻纳甲装卦库
 │   ├── data/                 # 静态数据（签文/解梦/笔画）
 │   ├── auth/                 # JWT + SMS 认证
+│   ├── llm/                  # LLM 工具：setting_parser（设置项语义校准）
+│   ├── store/                # 持久化：db.py / models / crud（默认 SQLite）
 │   └── common/               # 异常、响应、工具函数、审计日志（audit_log.py）
 ├── mcp_server.py             # MCP Server（15 Tools）
 ├── cli.py                    # CLI 交互入口（18项菜单）

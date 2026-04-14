@@ -101,6 +101,12 @@ async def health():
 from app.api.v1.router import v1_router
 app.include_router(v1_router)
 
+
+@app.on_event("startup")
+async def _init_settings_db():
+    from app.store.db import init_db
+    await init_db()
+
 # Register engines
 import importlib
 importlib.import_module("app.engine.ziwei")
