@@ -10,7 +10,7 @@ DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "qianwen"
 
 _CACHE: dict[str, list[dict]] = {}
 
-SUPPORTED_TYPES = ["guanyin", "huangdaxian", "zhuge"]
+SUPPORTED_TYPES = ["guanyin", "huangdaxian", "zhuge", "mazu"]
 
 
 def _load(qtype: str) -> list[dict]:
@@ -42,16 +42,20 @@ TYPE_NAMES = {
     "guanyin": "观音灵签",
     "huangdaxian": "黄大仙灵签",
     "zhuge": "诸葛神算",
+    "mazu": "妈祖六十甲子签",
 }
 
 
 def _build_text(qtype: str, sign: dict[str, Any]) -> str:
     title = TYPE_NAMES.get(qtype, qtype)
-    lines = [
-        f"----------{title}----------",
-        f"第 {sign.get('number', '?')} 签",
-        f"吉凶：{sign.get('level', '未知')}",
-    ]
+    head = f"第 {sign.get('number', '?')} 签"
+    gz = sign.get("ganzhi", "")
+    if gz:
+        head += f"  {gz}"
+    lines = [f"----------{title}----------", head]
+    level = sign.get("level", "")
+    if level:
+        lines.append(f"吉凶：{level}")
     poem = sign.get("poem", "")
     if poem:
         lines.append(f"签诗：{poem}")

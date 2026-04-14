@@ -100,7 +100,11 @@ DS-Oracle 是一套东方命理计算工具集（15个工具），你是这套�
 - 奇门/遁甲/八门九星 → qimen
 - 六壬/四课三传 → liuren
 - 周易/大衍/筮法 → iching
-- 求签/抽签/灵签/签文 → qianwen
+- 求签/抽签/灵签/签文（未指定签种）→ qianwen（默认观音，可 sign_type 切换）
+- 观音灵签/观音签 → qianwen_guanyin
+- 黄大仙签/黄大仙灵签 → qianwen_huangdaxian
+- 诸葛神算/诸葛签 → qianwen_zhuge
+- 妈祖签/天后签/六十甲子签 → qianwen_mazu
 - 梦到/梦见/做梦/解梦 → jiemeng
 - 名字好不好/姓名分析/五格/起名 → name_analysis
 - 合婚/配不配/合适吗/般配（涉及两人）→ hehun
@@ -389,10 +393,10 @@ async def qianwen(
     sign_type: str = "guanyin",
     question: str = "",
 ) -> str:
-    """求签。支持观音灵签(98签)、黄大仙灵签(100签)、诸葛神算(384签)。
+    """求签（通用入口）。支持观音灵签(98签)、黄大仙灵签(100签)、诸葛神算(384签)、妈祖六十甲子签(60签)。
 
     Args:
-        sign_type: 签种，guanyin=观音灵签, huangdaxian=黄大仙灵签, zhuge=诸葛神算
+        sign_type: 签种，guanyin=观音灵签, huangdaxian=黄大仙灵签, zhuge=诸葛神算, mazu=妈祖六十甲子签
         question: 心中所问之事
     """
     from datetime import datetime
@@ -401,6 +405,55 @@ async def qianwen(
         birth_time="0", gender="男", question=question,
         extra={"type": sign_type},
     )
+
+
+async def _draw_qian(qtype: str, question: str) -> str:
+    from datetime import datetime
+    return await _call_engine(
+        "qianwen", name="求签", birth_date=datetime.now().strftime("%Y-%m-%d"),
+        birth_time="0", gender="男", question=question,
+        extra={"type": qtype},
+    )
+
+
+@mcp.tool()
+async def qianwen_guanyin(question: str = "") -> str:
+    """观音灵签（共98签）。心诚所问，抽一签获诗偈、解签、典故。
+
+    Args:
+        question: 心中所问之事
+    """
+    return await _draw_qian("guanyin", question)
+
+
+@mcp.tool()
+async def qianwen_huangdaxian(question: str = "") -> str:
+    """黄大仙灵签（共100签）。求财、问运、问事尤验。
+
+    Args:
+        question: 心中所问之事
+    """
+    return await _draw_qian("huangdaxian", question)
+
+
+@mcp.tool()
+async def qianwen_zhuge(question: str = "") -> str:
+    """诸葛神算（共384签）。对应易经384爻，擅断吉凶进退。
+
+    Args:
+        question: 心中所问之事
+    """
+    return await _draw_qian("zhuge", question)
+
+
+@mcp.tool()
+async def qianwen_mazu(question: str = "") -> str:
+    """妈祖六十甲子签（共60签）。以六十甲子配签诗，渡海、出行、平安事尤应。
+
+    Args:
+        question: 心中所问之事
+    """
+    return await _draw_qian("mazu", question)
 
 
 @mcp.tool()
