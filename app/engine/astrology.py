@@ -29,10 +29,11 @@ def calculate_astrology_engine(req: ChartRequest) -> ChartResult:
     hour, minute = TIME_MAP.get(time_idx, (11, 30))
     parts = req.birth_date.split("-")
     year, month, day = int(parts[0]), int(parts[1]), int(parts[2])
+    city = (req.extra.get("city") if req.extra else None) or ASTRO_CITY
     subject = AstrologicalSubjectFactory.from_birth_data(
         name=req.name, year=year, month=month, day=day,
         hour=hour, minute=minute,
-        city=ASTRO_CITY, nation=ASTRO_NATION,
+        city=city, nation=ASTRO_NATION,
         lng=ASTRO_LNG, lat=ASTRO_LAT, tz_str=ASTRO_TZ_STR, online=False,
     )
     lines = ["【西方星相学关键位】"]

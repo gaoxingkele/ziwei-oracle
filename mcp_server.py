@@ -86,18 +86,20 @@ def _missing_profile_fields(profile: dict) -> list[str]:
 
 async def _resolve_birth_args(
     name: str, birth_date: str, birth_time: str, gender: str,
-    device_id: str = "",
-) -> tuple[str, str, str, str]:
-    """将空参数用已设定的用户档案补齐；仍缺失则抛出 ValueError 让 LLM 向用户追问。"""
-    if name and birth_date and birth_time and gender:
-        return name, birth_date, birth_time, gender
-
+    device_id: str = "", city: str = "",
+) -> tuple[str, str, str, str, str]:
+    """无论 LLM 是否传参，都尝试读取档案并用档案补齐空位；
+    返回 (name, birth_date, birth_time, gender, city)。
+    仍有 date/time/gender 缺失时抛 ValueError 让 LLM 向用户追问。"""
+    # 始终查档案（即便 LLM 已经传了全部参数）——档案主要用来补 city 字段
     profile = await _load_user_profile(device_id)
+
     name = name or (profile.get("name") or "")
     birth_date = birth_date or (profile.get("birthday") or "")
     birth_time = birth_time or (profile.get("birthtime") or "")
     if not gender:
         gender = _sex_to_gender(profile.get("sex")) or ""
+    city = city or (profile.get("city") or "")
 
     missing = []
     if not birth_date:
@@ -106,8 +108,7 @@ async def _resolve_birth_args(
         missing.append("出生时间")
     if not gender:
         missing.append("性别")
-    # 出生地点在档案中存在但不是引擎必填；缺失则提示用户补充
-    if not profile.get("city"):
+    if not city:
         missing.append("出生地点")
     if missing:
         raise ValueError(
@@ -120,7 +121,7 @@ async def _resolve_birth_args(
         )
     if not name:
         name = "本人"
-    return name, birth_date, birth_time, gender
+    return name, birth_date, birth_time, gender, city
 
 
 def _parse_time(s: str) -> str:
@@ -201,20 +202,27 @@ DS-Oracle 是一套东方命理计算工具集（15个工具），你是这套�
 
 当缺少必要参数时，用以下方式追问：
 
-### 需要出生信息的工具（ziwei/bazi/astrology/hehun）
-**调用顺序：先查档案，再决定是否追问。**
-1. 你会在系统提示或用户消息里拿到 `device_id`（设备端下发），后续所有与用户档案相关的工具调用都**必须把这个 device_id 原样传入**。
-2. 首次调用 ziwei/bazi/astrology 前，先调用 `get_user_profile(device_id=<上述值>)` 查询该设备的用户档案。
-3. 若档案已包含出生日期、出生时间、出生地点、性别，则直接调用对应工具并只传 `device_id`（其它参数留空）——服务端会自动用档案补齐，**不要**再向用户追问出生日期。
-4. 若档案缺字段，才按下述模板向用户追问：
-   "好的～麻烦告诉我您要咨询之人的：
-   1. 姓名（称呼就行）
-   2. 出生日期（公历，如1990年5月15日）
-   3. 出生时间（大概几点就行，如下午2点）
-   4. 出生地点（城市）
-   5. 性别"
-5. 若对话上下文没给 device_id，而工具抛出 "device_id=... 档案缺少" 错误，请把错误信息里的 device_id 告诉用户，提示其在设置页面先完成资料填写，再重试。
-6. 如果用户问的是「别人」而不是档案主人（如给朋友排盘），应显式把对方信息作为参数传入，**不要**依赖档案。
+### 需要出生信息的工具（ziwei / bazi / astrology / hehun）—— 档案优先（强制）
+
+**这组工具共用同一条规则，不因具体工具名而改变。** 不管用户是问"八字"、"紫微"还是"星座/星盘"，流程完全一致：
+
+1. **device_id 透传**：系统提示或用户消息里会下发 `device_id`。所有档案相关调用（`get_user_profile` / `ziwei` / `bazi` / `astrology` / `hehun`）**必须把这个 device_id 原样传入**，一次对话中不可遗漏、不可更改。
+2. **零追问策略**：不要先问"请告诉我生日时间"之类。第一步就是**直接调用目标工具**（如 `ziwei(device_id=...)`），其他参数全部留空。服务端会自动读取档案补齐。
+3. **只在服务端返回 "当前用户档案（device_id=...）缺少：…" 错误后，才按下面模板追问**：
+   > 好的～麻烦告诉我您要咨询之人的：
+   > 1. 姓名（称呼就行）
+   > 2. 出生日期（公历，如1990年5月15日）
+   > 3. 出生时间（大概几点就行，如下午2点）
+   > 4. 出生地点（城市）
+   > 5. 性别
+4. 如果想先确认档案是否齐全（避免用户体验上的"错误后再问"），可以先调 `get_user_profile(device_id=...)` 查看。
+5. 错误消息里的 device_id 如果不对（与对话上下文下发的不一致），请在下一次工具调用里显式传正确的 device_id。
+6. **给他人排盘**（如"帮我朋友排一下"）：此时**不要**依赖档案，应把对方姓名/日期/时间/地点/性别作为参数显式传给工具。
+
+**反例（不要这么做）**：
+- ❌ 用户说"帮我看紫微" → LLM 回答"请告诉我你的生日和时间"
+- ❌ 用户说"我的星盘如何" → LLM 只问生日不调用 `astrology`
+- ✅ 正确做法：直接 `ziwei(device_id="...")` 或 `astrology(device_id="...")`，档案齐全就出结果，缺失才追问。
 
 ### 需要占题的工具（meihua/liuyao_qigua/iching/qimen/liuren）
 "请问您想问什么事呢？比如事业、感情、财运、出行等，说得越具体解读越准哦～"
@@ -319,22 +327,23 @@ async def ziwei(
     birth_date: str = "",
     birth_time: str = "",
     gender: str = "",
+    city: str = "",
     device_id: str = "",
 ) -> str:
     """紫微斗数排盘。根据出生信息排出命盘十二宫、主星亮度、四化等。
-    调用策略：传入 device_id 且其它参数留空时，自动读取该设备用户档案（由 /api/v1/setting/* 设定）；
-    若档案已设定出生日期/时间/地点/性别则无需再问用户；若档案不全会抛错告知缺失项。
-    device_id 应与设备端调用 setting API 时使用的一致。
+    调用策略：推荐仅传入 device_id，其余留空——服务端会自动用该设备已保存的档案
+    （由 /api/v1/setting/* 设定）补齐。档案齐全时**不要**再向用户追问。
 
     Args:
         name: 姓名（留空使用档案）
         birth_date: 公历出生日期 YYYY-MM-DD（留空使用档案）
         birth_time: 出生时间，支持 24h/中文/时辰名（留空使用档案）
         gender: 性别，男 或 女（留空使用档案）
+        city: 出生地（留空使用档案；ziwei 本身不依赖城市但用于校验档案完整性）
         device_id: 设备标识；留空则用服务端 MCP_USER_ID
     """
-    name, birth_date, birth_time, gender = await _resolve_birth_args(
-        name, birth_date, birth_time, gender, device_id=device_id,
+    name, birth_date, birth_time, gender, _city = await _resolve_birth_args(
+        name, birth_date, birth_time, gender, device_id=device_id, city=city,
     )
     return await _call_engine(
         "ziwei", name=name, birth_date=birth_date,
@@ -348,21 +357,23 @@ async def bazi(
     birth_date: str = "",
     birth_time: str = "",
     gender: str = "",
+    city: str = "",
     device_id: str = "",
 ) -> str:
     """八字排盘（四柱八字）。排出年月日时四柱、十神、藏干、纳音等。
-    调用策略：传入 device_id 且其它参数留空时，自动读取该设备用户档案；
-    若档案已设定出生日期/时间/地点/性别则无需再问用户；若档案不全会抛错告知缺失项。
+    调用策略：推荐仅传入 device_id，其余留空——服务端会自动用该设备已保存的档案补齐。
+    档案齐全时**不要**再向用户追问。
 
     Args:
         name: 姓名（留空使用档案）
         birth_date: 公历出生日期 YYYY-MM-DD（留空使用档案）
-        birth_time: 出生时间，支持 24h/中文/时辰名（留空使用档案）
+        birth_time: 出生时间（留空使用档案）
         gender: 性别，男 或 女（留空使用档案）
+        city: 出生地（留空使用档案；bazi 本身不依赖城市但用于校验档案完整性）
         device_id: 设备标识；留空则用服务端 MCP_USER_ID
     """
-    name, birth_date, birth_time, gender = await _resolve_birth_args(
-        name, birth_date, birth_time, gender, device_id=device_id,
+    name, birth_date, birth_time, gender, _city = await _resolve_birth_args(
+        name, birth_date, birth_time, gender, device_id=device_id, city=city,
     )
     return await _call_engine(
         "bazi", name=name, birth_date=birth_date,
@@ -469,25 +480,29 @@ async def astrology(
     birth_date: str = "",
     birth_time: str = "",
     gender: str = "",
+    city: str = "",
     device_id: str = "",
 ) -> str:
     """西方占星术星盘。计算太阳、月亮、上升等星体在星座和宫位的分布。
-    调用策略：传入 device_id 且其它参数留空时，自动读取该设备用户档案；
-    若档案已设定出生日期/时间/地点/性别则无需再问用户；若档案不全会抛错告知缺失项。
+    调用策略：推荐仅传入 device_id，其余留空——服务端会自动用该设备已保存的档案
+    （含出生地 city）补齐，不要再向用户追问出生信息。
+    注：出生地用于星盘的城市标签；经纬度/时区目前使用服务端默认值。
 
     Args:
         name: 姓名（留空使用档案）
         birth_date: 公历出生日期 YYYY-MM-DD（留空使用档案）
-        birth_time: 出生时间，支持 24h/中文（留空使用档案）
+        birth_time: 出生时间（留空使用档案）
         gender: 性别，男 或 女（留空使用档案）
+        city: 出生地（留空使用档案中的 city）
         device_id: 设备标识；留空则用服务端 MCP_USER_ID
     """
-    name, birth_date, birth_time, gender = await _resolve_birth_args(
-        name, birth_date, birth_time, gender, device_id=device_id,
+    name, birth_date, birth_time, gender, city = await _resolve_birth_args(
+        name, birth_date, birth_time, gender, device_id=device_id, city=city,
     )
     return await _call_engine(
         "astrology", name=name, birth_date=birth_date,
         birth_time=_parse_time(birth_time), gender=gender,
+        extra={"city": city},
     )
 
 
