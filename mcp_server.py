@@ -45,6 +45,73 @@ def _hour_to_shichen(hour: int) -> int:
     return (hour + 1) // 2
 
 
+# ── 用户档案（device_id = MCP_USER_ID）──
+_REQUIRED_PROFILE_FIELDS = ("birthday", "birthtime", "city", "sex")
+
+
+def _sex_to_gender(sex) -> str | None:
+    if sex == 1 or sex == "1":
+        return "男"
+    if sex == 0 or sex == "0":
+        return "女"
+    return None
+
+
+async def _load_user_profile() -> dict:
+    """读取当前 MCP 用户（device_id = MCP_USER_ID）的档案。未设置字段为 None。"""
+    from app.store.crud.settings import get_setting
+    from app.store.db import SessionLocal
+
+    device_id = os.getenv("MCP_USER_ID") or "mcp_anonymous"
+    async with SessionLocal() as session:
+        row = await get_setting(session, device_id)
+    if row is None:
+        return {"device_id": device_id, "name": None, "sex": None,
+                "birthday": None, "birthtime": None, "city": None,
+                "updated_at": None}
+    return row.to_dict()
+
+
+def _missing_profile_fields(profile: dict) -> list[str]:
+    return [f for f in _REQUIRED_PROFILE_FIELDS if not profile.get(f) and profile.get(f) != 0]
+
+
+async def _resolve_birth_args(
+    name: str, birth_date: str, birth_time: str, gender: str,
+) -> tuple[str, str, str, str]:
+    """将空参数用已设定的用户档案补齐；仍缺失则抛出 ValueError 让 LLM 向用户追问。"""
+    if name and birth_date and birth_time and gender:
+        return name, birth_date, birth_time, gender
+
+    profile = await _load_user_profile()
+    name = name or (profile.get("name") or "")
+    birth_date = birth_date or (profile.get("birthday") or "")
+    birth_time = birth_time or (profile.get("birthtime") or "")
+    if not gender:
+        gender = _sex_to_gender(profile.get("sex")) or ""
+
+    missing = []
+    if not birth_date:
+        missing.append("出生日期")
+    if not birth_time:
+        missing.append("出生时间")
+    if not gender:
+        missing.append("性别")
+    # 出生地点在档案中存在但不是引擎必填；缺失则提示用户补充
+    if not profile.get("city"):
+        missing.append("出生地点")
+    if missing:
+        raise ValueError(
+            "当前用户档案缺少：" + "、".join(missing)
+            + "。请询问用户：出生日期（公历，如1990-05-15）、出生时间（如下午2点）、出生地点（城市）"
+            + ("、性别" if "性别" in missing else "")
+            + "；获得后可调用 /api/v1/setting/* 写入档案，或直接在本次调用中以参数传入。"
+        )
+    if not name:
+        name = "本人"
+    return name, birth_date, birth_time, gender
+
+
 def _parse_time(s: str) -> str:
     """将多种时间格式统一转为时辰序号字符串。"""
     s = (s or "").strip()
@@ -124,11 +191,17 @@ DS-Oracle 是一套东方命理计算工具集（15个工具），你是这套�
 当缺少必要参数时，用以下方式追问：
 
 ### 需要出生信息的工具（ziwei/bazi/astrology/hehun）
-"好的～麻烦告诉我：
-1. 姓名（称呼就行）
-2. 出生日期（公历，如1990年5月15日）
-3. 出生时间（大概几点就行，如下午2点）
-4. 性别"
+**调用顺序：先查档案，再决定是否追问。**
+1. 首次调用 ziwei/bazi/astrology 前，先调用 `get_user_profile` 查询当前用户档案。
+2. 若档案已包含出生日期、出生时间、出生地点、性别，则直接调用对应工具且参数全部留空——服务端会自动用档案补齐，**不要**再向用户追问出生日期。
+3. 若档案缺字段，才按下述模板向用户追问：
+   "好的～麻烦告诉我您要咨询之人的：
+   1. 姓名（称呼就行）
+   2. 出生日期（公历，如1990年5月15日）
+   3. 出生时间（大概几点就行，如下午2点）
+   4. 出生地点（城市）
+   5. 性别"
+4. 如果用户问的是「别人」而不是档案主人（如给朋友排盘），应显式把对方信息作为参数传入，不要使用档案。
 
 ### 需要占题的工具（meihua/liuyao_qigua/iching/qimen/liuren）
 "请问您想问什么事呢？比如事业、感情、财运、出行等，说得越具体解读越准哦～"
@@ -195,21 +268,55 @@ async def _call_engine(system: str, **kwargs) -> str:
 # 14 个 MCP Tools
 # ══════════════════════════════════════════════
 
+
+@mcp.tool()
+async def get_user_profile() -> str:
+    """查询当前用户档案（姓名/性别/出生日期/出生时间/出生地点）。
+    在调用 ziwei/bazi/astrology/hehun 前应先调用本工具，确认档案是否已设定：
+      - 若已设定出生日期/时间/地点/性别，则直接调用对应工具（参数留空即可，会自动使用档案）
+      - 若字段为 null，则先询问用户补全这些信息
+    档案由设备端通过 /api/v1/setting/birthday、/birthtime、/city、/sex、/name 写入。
+    """
+    profile = await _load_user_profile()
+    missing = _missing_profile_fields(profile)
+    lines = [
+        f"device_id: {profile.get('device_id')}",
+        f"姓名 name: {profile.get('name') or '（未设置）'}",
+        f"性别 sex: {_sex_to_gender(profile.get('sex')) or '（未设置）'}",
+        f"出生日期 birthday: {profile.get('birthday') or '（未设置）'}",
+        f"出生时间 birthtime: {profile.get('birthtime') or '（未设置）'}",
+        f"出生地点 city: {profile.get('city') or '（未设置）'}",
+        f"updated_at: {profile.get('updated_at') or '—'}",
+    ]
+    if missing:
+        lines.append("")
+        lines.append("缺失字段：" + "、".join(missing) + " —— 请向用户询问后再调用命理工具。")
+    else:
+        lines.append("")
+        lines.append("档案完整，可直接以空参数调用 ziwei/bazi/astrology。")
+    return "\n".join(lines)
+
 @mcp.tool()
 async def ziwei(
-    name: str,
-    birth_date: str,
-    birth_time: str,
-    gender: str,
+    name: str = "",
+    birth_date: str = "",
+    birth_time: str = "",
+    gender: str = "",
 ) -> str:
     """紫微斗数排盘。根据出生信息排出命盘十二宫、主星亮度、四化等。
+    调用策略：参数全部留空时，自动读取当前用户档案（由 /api/v1/setting/* 设定）；
+    若档案已设定出生日期/时间/地点/性别则无需再问用户；若档案不全会抛错告知缺失项，
+    此时应先询问用户补全（或调用 get_user_profile 查看）。
 
     Args:
-        name: 姓名
-        birth_date: 公历出生日期，格式 YYYY-MM-DD，如 1990-05-15
-        birth_time: 出生时间，支持 24小时制(如14:00)、中文(如下午2点)、时辰名(如午)
-        gender: 性别，男 或 女
+        name: 姓名（留空使用档案中的姓名，否则传入）
+        birth_date: 公历出生日期 YYYY-MM-DD（留空使用档案）
+        birth_time: 出生时间，支持 24h/中文/时辰名（留空使用档案）
+        gender: 性别，男 或 女（留空使用档案）
     """
+    name, birth_date, birth_time, gender = await _resolve_birth_args(
+        name, birth_date, birth_time, gender,
+    )
     return await _call_engine(
         "ziwei", name=name, birth_date=birth_date,
         birth_time=_parse_time(birth_time), gender=gender,
@@ -218,19 +325,24 @@ async def ziwei(
 
 @mcp.tool()
 async def bazi(
-    name: str,
-    birth_date: str,
-    birth_time: str,
-    gender: str,
+    name: str = "",
+    birth_date: str = "",
+    birth_time: str = "",
+    gender: str = "",
 ) -> str:
     """八字排盘（四柱八字）。排出年月日时四柱、十神、藏干、纳音等。
+    调用策略：参数全部留空时，自动读取当前用户档案（由 /api/v1/setting/* 设定）；
+    若档案已设定出生日期/时间/地点/性别则无需再问用户；若档案不全会抛错告知缺失项。
 
     Args:
-        name: 姓名
-        birth_date: 公历出生日期，格式 YYYY-MM-DD
-        birth_time: 出生时间，支持 24小时制(如14:00)、中文(如下午2点)、时辰名(如午)
-        gender: 性别，男 或 女
+        name: 姓名（留空使用档案）
+        birth_date: 公历出生日期 YYYY-MM-DD（留空使用档案）
+        birth_time: 出生时间，支持 24h/中文/时辰名（留空使用档案）
+        gender: 性别，男 或 女（留空使用档案）
     """
+    name, birth_date, birth_time, gender = await _resolve_birth_args(
+        name, birth_date, birth_time, gender,
+    )
     return await _call_engine(
         "bazi", name=name, birth_date=birth_date,
         birth_time=_parse_time(birth_time), gender=gender,
@@ -332,19 +444,24 @@ async def liuyao_qigua(
 
 @mcp.tool()
 async def astrology(
-    name: str,
-    birth_date: str,
-    birth_time: str,
-    gender: str,
+    name: str = "",
+    birth_date: str = "",
+    birth_time: str = "",
+    gender: str = "",
 ) -> str:
     """西方占星术星盘。计算太阳、月亮、上升等星体在星座和宫位的分布。
+    调用策略：参数全部留空时，自动读取当前用户档案（由 /api/v1/setting/* 设定）；
+    若档案已设定出生日期/时间/地点/性别则无需再问用户；若档案不全会抛错告知缺失项。
 
     Args:
-        name: 姓名
-        birth_date: 公历出生日期，格式 YYYY-MM-DD
-        birth_time: 出生时间，支持 24小时制(如14:00)、中文(如下午2点)
-        gender: 性别，男 或 女
+        name: 姓名（留空使用档案）
+        birth_date: 公历出生日期 YYYY-MM-DD（留空使用档案）
+        birth_time: 出生时间，支持 24h/中文（留空使用档案）
+        gender: 性别，男 或 女（留空使用档案）
     """
+    name, birth_date, birth_time, gender = await _resolve_birth_args(
+        name, birth_date, birth_time, gender,
+    )
     return await _call_engine(
         "astrology", name=name, birth_date=birth_date,
         birth_time=_parse_time(birth_time), gender=gender,

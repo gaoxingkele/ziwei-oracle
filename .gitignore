@@ -9,6 +9,9 @@ output/
 # 审计日志（按 user_id / 日期分片）
 logs/
 
+# 本地 SQLite 数据库
+*.db
+
 # Python
 __pycache__/
 *.py[cod]
