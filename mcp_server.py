@@ -57,16 +57,24 @@ def _sex_to_gender(sex) -> str | None:
     return None
 
 
-async def _load_user_profile() -> dict:
-    """读取当前 MCP 用户（device_id = MCP_USER_ID）的档案。未设置字段为 None。"""
+def _resolve_device_id(device_id: str = "") -> str:
+    """统一 device_id 解析：显式参数 > MCP_USER_ID 环境变量 > mcp_anonymous。"""
+    did = (device_id or "").strip()
+    if did:
+        return did
+    return os.getenv("MCP_USER_ID") or "mcp_anonymous"
+
+
+async def _load_user_profile(device_id: str = "") -> dict:
+    """读取指定 device_id（或默认当前 MCP 用户）的档案。未设置字段为 None。"""
     from app.store.crud.settings import get_setting
     from app.store.db import SessionLocal
 
-    device_id = os.getenv("MCP_USER_ID") or "mcp_anonymous"
+    did = _resolve_device_id(device_id)
     async with SessionLocal() as session:
-        row = await get_setting(session, device_id)
+        row = await get_setting(session, did)
     if row is None:
-        return {"device_id": device_id, "name": None, "sex": None,
+        return {"device_id": did, "name": None, "sex": None,
                 "birthday": None, "birthtime": None, "city": None,
                 "updated_at": None}
     return row.to_dict()
@@ -78,12 +86,13 @@ def _missing_profile_fields(profile: dict) -> list[str]:
 
 async def _resolve_birth_args(
     name: str, birth_date: str, birth_time: str, gender: str,
+    device_id: str = "",
 ) -> tuple[str, str, str, str]:
     """将空参数用已设定的用户档案补齐；仍缺失则抛出 ValueError 让 LLM 向用户追问。"""
     if name and birth_date and birth_time and gender:
         return name, birth_date, birth_time, gender
 
-    profile = await _load_user_profile()
+    profile = await _load_user_profile(device_id)
     name = name or (profile.get("name") or "")
     birth_date = birth_date or (profile.get("birthday") or "")
     birth_time = birth_time or (profile.get("birthtime") or "")
@@ -102,10 +111,12 @@ async def _resolve_birth_args(
         missing.append("出生地点")
     if missing:
         raise ValueError(
-            "当前用户档案缺少：" + "、".join(missing)
+            f"当前用户档案（device_id={profile.get('device_id')}）缺少："
+            + "、".join(missing)
             + "。请询问用户：出生日期（公历，如1990-05-15）、出生时间（如下午2点）、出生地点（城市）"
             + ("、性别" if "性别" in missing else "")
             + "；获得后可调用 /api/v1/setting/* 写入档案，或直接在本次调用中以参数传入。"
+            + " 若 device_id 不是你期望的值，请在调用工具时显式传 device_id 参数。"
         )
     if not name:
         name = "本人"
@@ -192,16 +203,18 @@ DS-Oracle 是一套东方命理计算工具集（15个工具），你是这套�
 
 ### 需要出生信息的工具（ziwei/bazi/astrology/hehun）
 **调用顺序：先查档案，再决定是否追问。**
-1. 首次调用 ziwei/bazi/astrology 前，先调用 `get_user_profile` 查询当前用户档案。
-2. 若档案已包含出生日期、出生时间、出生地点、性别，则直接调用对应工具且参数全部留空——服务端会自动用档案补齐，**不要**再向用户追问出生日期。
-3. 若档案缺字段，才按下述模板向用户追问：
+1. 你会在系统提示或用户消息里拿到 `device_id`（设备端下发），后续所有与用户档案相关的工具调用都**必须把这个 device_id 原样传入**。
+2. 首次调用 ziwei/bazi/astrology 前，先调用 `get_user_profile(device_id=<上述值>)` 查询该设备的用户档案。
+3. 若档案已包含出生日期、出生时间、出生地点、性别，则直接调用对应工具并只传 `device_id`（其它参数留空）——服务端会自动用档案补齐，**不要**再向用户追问出生日期。
+4. 若档案缺字段，才按下述模板向用户追问：
    "好的～麻烦告诉我您要咨询之人的：
    1. 姓名（称呼就行）
    2. 出生日期（公历，如1990年5月15日）
    3. 出生时间（大概几点就行，如下午2点）
    4. 出生地点（城市）
    5. 性别"
-4. 如果用户问的是「别人」而不是档案主人（如给朋友排盘），应显式把对方信息作为参数传入，不要使用档案。
+5. 若对话上下文没给 device_id，而工具抛出 "device_id=... 档案缺少" 错误，请把错误信息里的 device_id 告诉用户，提示其在设置页面先完成资料填写，再重试。
+6. 如果用户问的是「别人」而不是档案主人（如给朋友排盘），应显式把对方信息作为参数传入，**不要**依赖档案。
 
 ### 需要占题的工具（meihua/liuyao_qigua/iching/qimen/liuren）
 "请问您想问什么事呢？比如事业、感情、财运、出行等，说得越具体解读越准哦～"
@@ -270,14 +283,18 @@ async def _call_engine(system: str, **kwargs) -> str:
 
 
 @mcp.tool()
-async def get_user_profile() -> str:
-    """查询当前用户档案（姓名/性别/出生日期/出生时间/出生地点）。
+async def get_user_profile(device_id: str = "") -> str:
+    """查询指定 device_id 的用户档案（姓名/性别/出生日期/出生时间/出生地点）。
     在调用 ziwei/bazi/astrology/hehun 前应先调用本工具，确认档案是否已设定：
-      - 若已设定出生日期/时间/地点/性别，则直接调用对应工具（参数留空即可，会自动使用档案）
+      - 若已设定出生日期/时间/地点/性别，则直接调用对应工具并传同一 device_id（其它参数留空即可）
       - 若字段为 null，则先询问用户补全这些信息
-    档案由设备端通过 /api/v1/setting/birthday、/birthtime、/city、/sex、/name 写入。
+    档案由设备端通过 /api/v1/setting/birthday、/birthtime、/city、/sex、/name 写入，
+    需保证与调用本工具时传入的 device_id 一致。
+
+    Args:
+        device_id: 设备/用户标识；留空则使用服务端环境变量 MCP_USER_ID，再无则 mcp_anonymous
     """
-    profile = await _load_user_profile()
+    profile = await _load_user_profile(device_id)
     missing = _missing_profile_fields(profile)
     lines = [
         f"device_id: {profile.get('device_id')}",
@@ -302,20 +319,22 @@ async def ziwei(
     birth_date: str = "",
     birth_time: str = "",
     gender: str = "",
+    device_id: str = "",
 ) -> str:
     """紫微斗数排盘。根据出生信息排出命盘十二宫、主星亮度、四化等。
-    调用策略：参数全部留空时，自动读取当前用户档案（由 /api/v1/setting/* 设定）；
-    若档案已设定出生日期/时间/地点/性别则无需再问用户；若档案不全会抛错告知缺失项，
-    此时应先询问用户补全（或调用 get_user_profile 查看）。
+    调用策略：传入 device_id 且其它参数留空时，自动读取该设备用户档案（由 /api/v1/setting/* 设定）；
+    若档案已设定出生日期/时间/地点/性别则无需再问用户；若档案不全会抛错告知缺失项。
+    device_id 应与设备端调用 setting API 时使用的一致。
 
     Args:
-        name: 姓名（留空使用档案中的姓名，否则传入）
+        name: 姓名（留空使用档案）
         birth_date: 公历出生日期 YYYY-MM-DD（留空使用档案）
         birth_time: 出生时间，支持 24h/中文/时辰名（留空使用档案）
         gender: 性别，男 或 女（留空使用档案）
+        device_id: 设备标识；留空则用服务端 MCP_USER_ID
     """
     name, birth_date, birth_time, gender = await _resolve_birth_args(
-        name, birth_date, birth_time, gender,
+        name, birth_date, birth_time, gender, device_id=device_id,
     )
     return await _call_engine(
         "ziwei", name=name, birth_date=birth_date,
@@ -329,9 +348,10 @@ async def bazi(
     birth_date: str = "",
     birth_time: str = "",
     gender: str = "",
+    device_id: str = "",
 ) -> str:
     """八字排盘（四柱八字）。排出年月日时四柱、十神、藏干、纳音等。
-    调用策略：参数全部留空时，自动读取当前用户档案（由 /api/v1/setting/* 设定）；
+    调用策略：传入 device_id 且其它参数留空时，自动读取该设备用户档案；
     若档案已设定出生日期/时间/地点/性别则无需再问用户；若档案不全会抛错告知缺失项。
 
     Args:
@@ -339,9 +359,10 @@ async def bazi(
         birth_date: 公历出生日期 YYYY-MM-DD（留空使用档案）
         birth_time: 出生时间，支持 24h/中文/时辰名（留空使用档案）
         gender: 性别，男 或 女（留空使用档案）
+        device_id: 设备标识；留空则用服务端 MCP_USER_ID
     """
     name, birth_date, birth_time, gender = await _resolve_birth_args(
-        name, birth_date, birth_time, gender,
+        name, birth_date, birth_time, gender, device_id=device_id,
     )
     return await _call_engine(
         "bazi", name=name, birth_date=birth_date,
@@ -448,9 +469,10 @@ async def astrology(
     birth_date: str = "",
     birth_time: str = "",
     gender: str = "",
+    device_id: str = "",
 ) -> str:
     """西方占星术星盘。计算太阳、月亮、上升等星体在星座和宫位的分布。
-    调用策略：参数全部留空时，自动读取当前用户档案（由 /api/v1/setting/* 设定）；
+    调用策略：传入 device_id 且其它参数留空时，自动读取该设备用户档案；
     若档案已设定出生日期/时间/地点/性别则无需再问用户；若档案不全会抛错告知缺失项。
 
     Args:
@@ -458,9 +480,10 @@ async def astrology(
         birth_date: 公历出生日期 YYYY-MM-DD（留空使用档案）
         birth_time: 出生时间，支持 24h/中文（留空使用档案）
         gender: 性别，男 或 女（留空使用档案）
+        device_id: 设备标识；留空则用服务端 MCP_USER_ID
     """
     name, birth_date, birth_time, gender = await _resolve_birth_args(
-        name, birth_date, birth_time, gender,
+        name, birth_date, birth_time, gender, device_id=device_id,
     )
     return await _call_engine(
         "astrology", name=name, birth_date=birth_date,
