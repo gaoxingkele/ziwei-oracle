@@ -3,8 +3,9 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-# 从项目根目录（本文件所在目录）加载 .env
-_env_path = Path(__file__).resolve().parent / ".env"
+# 从项目根目录加载 .env：本机调试若存在 .env.local 则优先用它（云端无此文件，回落 .env）
+_root = Path(__file__).resolve().parent
+_env_path = _root / ".env.local" if (_root / ".env.local").exists() else _root / ".env"
 load_dotenv(_env_path)
 
 # 避免循环导入，在 load_dotenv 之后再用 os.getenv

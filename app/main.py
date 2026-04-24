@@ -107,18 +107,16 @@ async def _init_settings_db():
     from app.store.db import init_db
     await init_db()
 
-# Register engines
+# Register engines —— 缺依赖的引擎跳过（本机调试常见，如 kerykeion/kinqimen 在新 Python 无预编译 wheel）
 import importlib
-importlib.import_module("app.engine.ziwei")
-importlib.import_module("app.engine.meihua")
-importlib.import_module("app.engine.liuyao")
-importlib.import_module("app.engine.astrology")
-importlib.import_module("app.engine.bazi")
-importlib.import_module("app.engine.qimen")
-importlib.import_module("app.engine.liuren")
-importlib.import_module("app.engine.iching")
-importlib.import_module("app.engine.qianwen")
-importlib.import_module("app.engine.jiemeng")
-importlib.import_module("app.engine.name_analysis")
-importlib.import_module("app.engine.hehun")
-importlib.import_module("app.engine.jiri")
+for _mod in [
+    "app.engine.ziwei", "app.engine.meihua", "app.engine.liuyao",
+    "app.engine.astrology", "app.engine.bazi", "app.engine.qimen",
+    "app.engine.liuren", "app.engine.iching", "app.engine.qianwen",
+    "app.engine.jiemeng", "app.engine.name_analysis", "app.engine.hehun",
+    "app.engine.jiri",
+]:
+    try:
+        importlib.import_module(_mod)
+    except ImportError as _e:
+        print(f"[warn] engine skipped: {_mod} ({_e})")

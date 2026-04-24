@@ -2,6 +2,27 @@
 
 中华术数综合平台 — FastAPI 后端 + MCP Server + CLI 客户端，集成 15 个命理/卜筮/相术引擎。
 
+## 本地 / 云端双环境切换
+
+服务端代码无需任何修改即可在本机调试或部署到云端，区别只在配置文件：
+
+| 环境 | 加载文件 | 启动命令 | 设备端 base URL |
+|------|----------|----------|------------------|
+| **本机调试** | `.env.local`（存在则优先） | `python mcp_server.py --host 0.0.0.0 --port 8811` | `http://<本机内网IP>:8000` |
+| **云端线上** | `.env`（无 `.env.local` 时回落） | 同上 | `http://117.50.48.22:8000` |
+
+加载逻辑统一在三处入口（`mcp_server.py` / `config.py` / `app/config.py`）：
+**存在 `.env.local` → 用它；否则 → 用 `.env`**。云端机器只要不放 `.env.local`，行为完全不变。
+
+**本机起步**：
+```bash
+cp .env.local.example .env.local   # 按需填 KIMI_API_KEY 等
+uvicorn app.main:app --host 0.0.0.0 --port 8000     # REST API（设备端 setting 调用）
+python mcp_server.py --host 0.0.0.0 --port 8811     # MCP Server（LLM 调用）
+```
+设备端把 base URL 改到本机内网 IP（用 `ipconfig` / `ifconfig` 查），即可联调。
+切回云端模式：删除或重命名 `.env.local` 即可。
+
 ## 功能总览
 
 ### 命理引擎（15 个）

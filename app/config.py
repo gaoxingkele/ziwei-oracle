@@ -3,7 +3,9 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-_env_path = Path(__file__).resolve().parent.parent / ".env"
+# 本机调试若存在 .env.local 则优先用它（云端无此文件，回落 .env）
+_root = Path(__file__).resolve().parent.parent
+_env_path = _root / ".env.local" if (_root / ".env.local").exists() else _root / ".env"
 load_dotenv(_env_path)
 
 def _str(key: str, default: str = "") -> str:

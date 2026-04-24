@@ -16,12 +16,14 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-# 加载 .env
-load_dotenv(Path(__file__).resolve().parent / ".env")
+# 加载 .env：本机调试若存在 .env.local 则优先用它（云端无此文件，回落 .env）
+_root = Path(__file__).resolve().parent
+load_dotenv(_root / ".env.local" if (_root / ".env.local").exists() else _root / ".env")
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 
-# ── 注册所有引擎 ──
+# ── 注册所有引擎（缺依赖的跳过：本机调试常见，如 kerykeion/kinqimen）──
 for mod in [
     "app.engine.ziwei", "app.engine.bazi", "app.engine.meihua",
     "app.engine.liuyao", "app.engine.astrology", "app.engine.qimen",
@@ -29,7 +31,10 @@ for mod in [
     "app.engine.jiemeng", "app.engine.name_analysis", "app.engine.hehun",
     "app.engine.almanac", "app.engine.jiri",
 ]:
-    importlib.import_module(mod)
+    try:
+        importlib.import_module(mod)
+    except ImportError as _e:
+        print(f"[warn] engine skipped: {mod} ({_e})")
 
 from app.engine.registry import ChartRequest, calculate as engine_calculate
 
@@ -156,8 +161,25 @@ def _parse_time(s: str) -> str:
 
 
 # ── 创建 MCP Server ──
+# 隧道/反代场景（ngrok / frp / cloudflared）会带外部域名的 Host 头，
+# FastMCP 默认的 DNS-rebinding 防护会拦截。通过 MCP_ALLOWED_HOSTS 放行：
+#   不设 → 默认保护（云端安全）
+#   "*"  → 关闭保护（仅限本机调试 + 隧道）
+#   逗号分隔域名 → 白名单
+_allowed = os.getenv("MCP_ALLOWED_HOSTS", "").strip()
+if _allowed == "*":
+    _sec = TransportSecuritySettings(enable_dns_rebinding_protection=False)
+elif _allowed:
+    _sec = TransportSecuritySettings(
+        allowed_hosts=[h.strip() for h in _allowed.split(",") if h.strip()],
+        allowed_origins=[h.strip() for h in _allowed.split(",") if h.strip()],
+    )
+else:
+    _sec = None
+
 mcp = FastMCP(
     "DS-Oracle",
+    transport_security=_sec,
     instructions="""
 DS-Oracle 是一套东方命理计算工具集（15个工具），你是这套工具的智能调度员和解读师。
 
