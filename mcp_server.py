@@ -37,6 +37,10 @@ for mod in [
         print(f"[warn] engine skipped: {mod} ({_e})")
 
 from app.engine.registry import ChartRequest, calculate as engine_calculate
+from app.engine.calendar import resolve_calendar
+from app.engine.ziwei_period import calculate_ziwei_period
+from app.engine.bazi_period import calculate_bazi_period
+from app.engine.astrology_period import calculate_astrology_period
 
 # ── 时间转换：24小时制 → 时辰序号 ──
 _SHICHEN_ORDER = "早子 丑 寅 卯 辰 巳 午 未 申 酉 戌 亥 晚子".split()
@@ -772,6 +776,96 @@ async def jiri(
         "jiri", name="吉日查询", birth_date=start_date,
         birth_time="0", gender="男", question=activity, extra=extra,
     )
+
+
+# ══════════════════════════════════════════════
+# Period 工具（Phase 1-4）
+# ══════════════════════════════════════════════
+
+@mcp.tool()
+async def calendar_resolve(
+    expr: str,
+    base_date: str = "",
+    view: str = "raw",
+    granularity: str = "auto",
+) -> str:
+    """解析中文/自然语言时间表达式，返回公历/农历范围和按时段切分列表。
+
+    Args:
+        expr: 时间表达式，如"今年"、"明年上半年"、"2025年3月"、"2025-03-01~2025-06-30"
+        base_date: 基准日期 YYYY-MM-DD，留空为今天
+        view: 切分视角，raw/bazi/ziwei/astrology
+        granularity: 切分粒度，auto/month/year
+    """
+    import json
+    result = resolve_calendar(expr=expr, base_date=base_date, view=view, granularity=granularity)
+    return json.dumps(result, ensure_ascii=False, indent=2)
+
+
+@mcp.tool()
+async def ziwei_period(
+    expr: str,
+    base_date: str = "",
+    granularity: str = "month",
+    device_id: str = "",
+) -> str:
+    """紫微斗数运限分析——给定时间范围，返回流年/流月与命宫主星的关系。
+    调用策略：仅传 expr 和 device_id，服务端自动读取命主档案。
+
+    Args:
+        expr: 时间表达式，如"今年"、"明年上半年"、"2025年3月"
+        base_date: 基准日期 YYYY-MM-DD，留空为今天
+        granularity: 切分粒度，month（默认）或 year
+        device_id: 设备标识；留空则用服务端 MCP_USER_ID
+    """
+    import json
+    profile = await _load_user_profile(device_id)
+    result = calculate_ziwei_period(profile=profile, expr=expr, base_date=base_date, granularity=granularity)
+    return json.dumps(result, ensure_ascii=False, indent=2)
+
+
+@mcp.tool()
+async def bazi_period(
+    expr: str,
+    base_date: str = "",
+    granularity: str = "month",
+    device_id: str = "",
+) -> str:
+    """八字流年流月分析——给定时间范围，返回各流月天干地支与日主的刑冲合害、十神关系。
+    调用策略：仅传 expr 和 device_id，服务端自动读取命主档案。
+
+    Args:
+        expr: 时间表达式，如"今年"、"明年上半年"、"2025年3月"
+        base_date: 基准日期 YYYY-MM-DD，留空为今天
+        granularity: 切分粒度，month（默认）或 year
+        device_id: 设备标识；留空则用服务端 MCP_USER_ID
+    """
+    import json
+    profile = await _load_user_profile(device_id)
+    result = calculate_bazi_period(profile=profile, expr=expr, base_date=base_date, granularity=granularity)
+    return json.dumps(result, ensure_ascii=False, indent=2)
+
+
+@mcp.tool()
+async def astrology_period(
+    expr: str,
+    base_date: str = "",
+    granularity: str = "month",
+    device_id: str = "",
+) -> str:
+    """西方占星时段分析——给定时间范围，返回本命盘摘要与时段切分（基础版，不含行星行运）。
+    调用策略：仅传 expr 和 device_id，服务端自动读取命主档案。
+
+    Args:
+        expr: 时间表达式，如"今年"、"明年上半年"、"2025年3月"
+        base_date: 基准日期 YYYY-MM-DD，留空为今天
+        granularity: 切分粒度，month（默认）或 year
+        device_id: 设备标识；留空则用服务端 MCP_USER_ID
+    """
+    import json
+    profile = await _load_user_profile(device_id)
+    result = calculate_astrology_period(profile=profile, expr=expr, base_date=base_date, granularity=granularity)
+    return json.dumps(result, ensure_ascii=False, indent=2)
 
 
 # ══════════════════════════════════════════════
