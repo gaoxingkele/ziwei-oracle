@@ -435,10 +435,14 @@ def resolve_calendar(
     # 3. resolved 块
     s_lunar = Solar.fromYmd(start.year, start.month, start.day).getLunar()
     e_lunar = Solar.fromYmd(end.year, end.month, end.day).getLunar()
+    # ganzhi_year_solar 用范围中点：避免 1/1 起算的范围跨立春时
+    # 错把"立春前的旧年干支"当成主流年（如 2026-01-01 ~ 2026-12-31 误返"乙巳"）
+    mid_date = start + (end - start) / 2
+    mid_lunar = Solar.fromYmd(mid_date.year, mid_date.month, mid_date.day).getLunar()
     resolved = {
         "gregorian": [start.isoformat(), end.isoformat()],
         "lunar": f"{s_lunar.getYearInChinese()}年{s_lunar.getMonthInChinese()}月{s_lunar.getDayInChinese()} ~ {e_lunar.getYearInChinese()}年{e_lunar.getMonthInChinese()}月{e_lunar.getDayInChinese()}",
-        "ganzhi_year_solar": s_lunar.getYearInGanZhiExact(),
+        "ganzhi_year_solar": mid_lunar.getYearInGanZhiExact(),
         "jieqi_in_range": _jieqi_in_range(start, end),
     }
 
