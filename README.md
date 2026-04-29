@@ -1,6 +1,8 @@
 # DS-Oracle
 
-中华术数综合平台 — FastAPI 后端 + MCP Server + CLI 客户端，集成 15 个命理/卜筮/相术引擎。
+中华术数综合平台 — FastAPI 后端 + MCP Server + CLI 客户端，集成 15 个命理/卜筮/相术引擎，并通过 4 个时段类工具（v3）支撑批量运限/流月/吉时分析。共暴露 **24 个 MCP Tools**：15 命理 + 4 签文专用 + 4 时段/解析。
+
+> **最新进展（v3，2026-04）**：新增 `calendar_resolve` 自然语言时间解析 + `ziwei_period` / `bazi_period` / `astrology_period` 三个时段批量工具，并在 MCP instructions 与 system-prompt 中加入路由规则——含时间词的命理提问统一走 *_period 工具，禁止 LLM 自行做农历换算/月柱推算/刑冲合害。修复了 `calendar_resolve("今年")` 在立春前误判 ganzhi_year 的 bug（区间中点法）。详见底部「修改日志」。
 
 ## 本地 / 云端双环境切换
 
@@ -61,7 +63,7 @@ Token 认证，免登录。适合微信小程序、H5 页面、后端服务集�
 
 ### 2. MCP Server（大模型工具调用）
 
-通过 MCP 协议暴露 15 个 Tools，大模型（Claude Desktop / 小龙虾等客户端）可直接调用精准计算。
+通过 MCP 协议暴露 24 个 Tools（15 命理 + 4 签文专用 + 4 时段/解析），大模型（Claude Desktop / 小龙虾 / 小智 ESP32 等客户端）可直接调用精准计算。
 
 ### 3. CLI 命令行（本地使用）
 
@@ -286,8 +288,52 @@ stdio 模式（本地）：
 | `hehun` | 八字合婚 | 甲乙双方出生信息 |
 | `almanac` | 黄历查询 | - |
 | `jiri` | 黄道吉日 | activity |
+| `calendar_resolve` | 自然语言时间解析（"今年/下个月/2027 春节"→ 起止日 + 干支字段） | text |
+| `ziwei_period` | 紫微运限批量分析（指定时段内多盘） | birth*, period |
+| `bazi_period` | 八字流月批量 + 对命主关系 | birth*, period |
+| `astrology_period` | 占星时段相位/容许度批量 | birth*, period |
 
-### 部署到服务器
+> **路由约定**：含时间词的命理提问（"今年八字怎么样"、"下个月紫微运限"）必须先走 `calendar_resolve` 拿到精确起止日和干支，再调用 `*_period`；禁止 LLM 自行推算月柱/刑冲合害——这些算术由引擎权威给出。详见 `docs/mcp-system-prompt.md`。
+
+### 运行时部署（与小智 ESP32 协同的 4 服务架构）
+
+实测稳定运行的本机布署 4 件套（端口经过编排，**互不冲突**）：
+
+| # | 服务 | 进程命令 | 监听 | 日志 |
+|---|------|----------|------|------|
+| 1 | DS-Oracle 设定服务器（FastAPI） | `uvicorn app.main:app --host 0.0.0.0 --port 8000` | `0.0.0.0:8000` | `logs_api.log` |
+| 2 | DS-Oracle MCP Server | `python mcp_server.py --port 8811` | `0.0.0.0:8811` | `logs_mcp.log` |
+| 3 | 小智 xiaozhi-server | `.venv/Scripts/python.exe app.py`（cwd `xiaozhi-esp32-server/main/xiaozhi-server/`） | `127.0.0.1:8765` ws + `127.0.0.1:8003` http | `logs_xz_server.log` / `logs_xz_err.log` |
+| 4 | ngrok 隧道 | `ngrok.exe http 8811` | 公网 `https://uncover-earflap-unspoken.ngrok-free.dev` → 本机 `:8811` | `logs_ngrok.log` |
+
+**启动注意事项**：
+
+- **小智 xiaozhi-server 必须用 `.venv/Scripts/python.exe`，不能用系统 `python`**——系统 Python（如 3.14）跑 `app.py` 会因 `opuslib_next` 找不到 opus.dll 启动失败；`.venv` 内置 pyogg 已带 `opus.dll`/`opusenc.dll`/`opusfile.dll`。
+- **8000 端口规划**：xiaozhi-server 默认 ws 端口也是 8000，已在 `xiaozhi-esp32-server/main/xiaozhi-server/data/.config.yaml` 永久改为 8765 避让 DS-Oracle FastAPI。
+- **ngrok 单 endpoint 限制**：免费版 `uncover-earflap-unspoken.ngrok-free.dev` 同一时刻只能由一个进程占用；重复启动会被拒（`ERR_NGROK_334`），先 `Get-Process ngrok` 看看是否已有进程在跑。
+- **ngrok 用途**：把本机 `:8811` MCP 服务暴露到公网，供云端小智或外部 LLM 客户端调用，对应仓库支持「本地/云端双环境切换」（commit `9904dce`）。
+
+**整套启停**（PowerShell 示意，开 4 个终端）：
+
+```powershell
+# 终端 1 — 设定服务器
+cd D:\aicoding\ds-oracle-cli
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+# 终端 2 — MCP
+cd D:\aicoding\ds-oracle-cli
+python mcp_server.py --port 8811
+
+# 终端 3 — 小智（注意是 .venv 解释器）
+cd D:\aicoding\xiaozhi-esp32-server\main\xiaozhi-server
+.\.venv\Scripts\python.exe app.py
+
+# 终端 4 — ngrok
+cd D:\aicoding\ds-oracle-cli
+.\ngrok.exe http 8811
+```
+
+### 部署到服务器（线上 systemd）
 
 ```bash
 # 1. 拉代码
@@ -547,6 +593,47 @@ python test_all_engines.py
 |------|-----------------|
 | `name_analysis` | "张伟这个名字好不好"、"帮我分析一下这个名字"、"给孩子起名叫王子轩，测一下" |
 | `hehun` | "我和女朋友合不合适"、"帮我们算算合婚"、"看看我俩八字配不配" |
+
+---
+
+## 修改日志（Changelog）
+
+按 commit 倒序列出主线变更。详细 diff 见 `git log`。
+
+### 2026-04（本月）
+
+| Commit | 类型 | 说明 |
+|--------|------|------|
+| `575621b` | docs | 刷新项目级 CLAUDE.md，把当前进度/关键决策/已知问题填实，反映 24 个 MCP 工具与 8000 端口编排 |
+| `1266abc` | chore | gitignore `.omx/` 与 `as.log` 本地工具产物 |
+| `e17dfc4` | fix(calendar) | `calendar_resolve("今年")` 改用区间中点算 ganzhi_year_solar，对齐 by_period.ganzhi_month。根因: 1/1 落在立春前会算成上一年干支，导致 LLM 把 2026 错说成"乙巳" |
+| `f2ba5c5` | feat(mcp) v3 phase 5 | mcp_server instructions + `docs/mcp-system-prompt.md` 加 `*_period` 路由规则；含时间词强制走 *_period，禁止 LLM 自行推算月柱/刑冲合害 |
+| `ac7a01c` | feat(mcp) v3 phase 1-4 | 注册 `calendar_resolve`、`ziwei_period`、`bazi_period`、`astrology_period` 为 MCP 工具 |
+| `1b6550f` | feat(bazi) v3 phase 3 | `bazi_period` 八字流月批量 + 对命主关系完整实现 |
+| `72bb8e2` | feat(ziwei) v3 phase 2 | `ziwei_period` 紫微运限批量分析 |
+| `2dd961d` | feat(calendar) v3 phase 1 | `calendar_resolve` 自然语言时间解析（含 6 字段时段输出） |
+| `64564ec` | docs | v3 设计稿（calendar_resolve + 3 period 工具） |
+| `9904dce` | feat | 本地/云端双环境切换 + ngrok 隧道；`.env.local` 优先 `.env` 回落 |
+| `f731915` | fix(mcp) | ziwei/bazi/astrology 三类工具统一 profile-first |
+| `2aff538` | fix(mcp) | profile-aware 工具显式接受 device_id |
+| `7a83d77` | feat | ziwei/bazi/astrology 自动从用户 profile 解析生辰 |
+| `4f75bc9` | refactor | setting API 改为直存（不再调 LLM） |
+| `8cf0aba` | docs | 设备端 setting API 集成指南 |
+| `d195f35` | feat | 设备 setting API（LLM 模糊输入归一化版本，已被 4f75bc9 替换） |
+| `8bbd18d` | feat | 按 user_id 日期分片的 JSONL 审计日志 |
+
+### 2026-04 早期 — 工具扩展
+
+| Commit | 类型 | 说明 |
+|--------|------|------|
+| — | feat | 新增妈祖六十甲子签 60 签数据（`app/data/qianwen/mazu.json`） |
+| — | feat | 新增 4 个签文专用 MCP 工具：`qianwen_guanyin` / `qianwen_huangdaxian` / `qianwen_zhuge` / `qianwen_mazu`（绕过 sign_type 参数，便于直接调用） |
+
+### 关键决策记录
+
+- **2026-04-27** — `calendar_resolve.ganzhi_year_solar` 使用 `(start+end)/2` 中点计算干支。**Why**: 1/1 在立春前归属上一年干支（农历），与 `by_period.ganzhi_month` 字段算法不一致会让 LLM 抄错。**实际触发**: MazuKit v1.69 测试中 LLM 把 2026 说成「乙巳」。
+- **2026-04-26** — 时段类提问统一走 `*_period` 工具，禁止 LLM 自行做农历换算/月柱推算/刑冲合害。**Why**: LLM 算术不可靠，必须由引擎权威给出；instructions 与 system-prompt 同步约束。
+- **2026-04-25** — 引入 `calendar_resolve` + 3 个 period 工具作为时段类提问的标准前置/批量出口（v3 设计稿）。
 
 ---
 
