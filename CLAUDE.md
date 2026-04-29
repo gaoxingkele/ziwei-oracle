@@ -11,26 +11,40 @@
 # 项目工作记忆
 
 ## 项目背景
-- 目标:[一句话说明]
-- 技术栈:[语言/框架]
-- 关键约束:[比如"必须兼容 Python 3.9"、"不要改动 X 模块"]
+- 目标: 中华术数综合平台 — 紫微/八字/占星/六壬/奇门/梅花/六爻/签文/解梦/合婚/起名/黄历/择日 一体化引擎
+- 技术栈: Python 3.10+, FastAPI, MCP SDK (FastMCP), SQLite/PostgreSQL, Kimi/OpenAI/Claude LLM
+- 关键约束: 引擎统一 `ChartRequest → ChartResult`，时间一律 `_parse_time()`，禁止 LLM 自行做命理算术
 
-## 当前进度
-- 已完成:[功能A、模块B]
-- 进行中:[正在改 xxx.py 的 yyy 函数]
-- 待办:[1. ... 2. ... 3. ...]
+## 当前进度（截至 2026-04-29）
+- 已完成:
+  - 19 个原始 MCP 工具（15 命理 + 4 签文专用）
+  - 设备 setting API（5 POST + 1 GET，LLM 语义校准 + SQLite 持久化）
+  - 按 user_id 分片的 JSONL 审计日志
+  - 本地/云端双环境切换 + ngrok 隧道
+  - profile-first：ziwei/bazi/astrology 自动从 device_id 取生辰
+  - **v3 时段工具（5 个 phase 全部入库）**：
+    - calendar_resolve（自然语言时间解析）
+    - ziwei_period / bazi_period / astrology_period（运限/流月/时段批量分析）
+    - mcp_server instructions + system-prompt 加 *_period 路由规则，禁止 LLM 自行推算
+  - 修了 calendar_resolve("今年") 立春前误判 ganzhi_year 的 bug（改用区间中点）
+- 进行中: —
+- 待办:
+  1. xiaozhi-esp32-server 接入实测（ds-oracle FastAPI 8000 端口需让位，建议改 8010）
+  2. 项目状态/CLAUDE.md 同步到 memory/project_status.md
 
 ## 关键决策记录
-- 2026-04-25:决定用 X 而不是 Y,原因:...
-- 2026-04-23:重构了 auth 模块,接口变成 ...
+- 2026-04-27: calendar_resolve 的 ganzhi_year_solar 改用 (start+end)/2 中点算干支，对齐 by_period.ganzhi_month。原因: 1/1 在立春前会算到上一年干支，与 by_period 字段打架，LLM 抄错导致 MazuKit v1.69 把 2026 说成"乙巳"。
+- 2026-04-26: 时段类提问统一走 *_period 工具，禁止 LLM 自行做农历换算/月柱推算/刑冲合害。原因: LLM 算术不可靠，必须由引擎权威给出。
+- 2026-04-25: 新增 calendar_resolve + 3 个 period 工具，作为时段类提问的标准前置/批量出口。
 
 ## 已知问题 / 坑
-- [踩过的坑,避免再踩]
+- DS-Oracle FastAPI 默认 :8000 与小智 xiaozhi-server :8000 ws 端口冲突，本机同时跑需改一边端口。
+- LLM 容易直接引用 calendar_resolve.ganzhi_year_solar 当流年，必须确保它和 by_period.ganzhi_month 算法一致（已修）。
 
 ## 最近一次中断时的状态
-- 正在做:[具体到函数名/文件名/行号]
-- 下一步应该:[非常具体的下一步动作]
-- 卡在哪:[如果有疑问或阻塞]
+- 正在做: v3 时段工具收尾，所有 commit 已 push 到 origin/master
+- 下一步应该: 用户要求并行启动 4 个服务器（小智 xiaozhi-server + manager-api + DS-Oracle MCP + DS-Oracle 设定服务器），需先解决 8000 端口冲突
+- 卡在哪: 等用户确认第 4 个服务器是不是 manager-api，以及 ds-oracle FastAPI 改用哪个端口
 
 ## 技术栈
 - Python 3.10+, FastAPI, Pydantic, SQLAlchemy (async)
@@ -47,8 +61,11 @@
 - `docs/mcp-trigger-prompts.md` — 15 个工具的语音唤醒提示词
 - `docs/mcp-system-prompt.md` — 大模型调度指南（意图路由/反问策略/解读风格）
 
-## 15 个 MCP Tools
-ziwei, bazi, meihua, liuyao, liuyao_qigua, astrology, qimen, liuren, iching, qianwen, jiemeng, name_analysis, hehun, almanac, jiri
+## MCP Tools（24 个）
+- 命理 (15): ziwei, bazi, meihua, liuyao, liuyao_qigua, astrology, qimen, liuren, iching, qianwen, jiemeng, name_analysis, hehun, almanac, jiri
+- 签文专用 (4): qianwen_guanyin, qianwen_huangdaxian, qianwen_zhuge, qianwen_mazu
+- 时段/解析 (4): calendar_resolve, ziwei_period, bazi_period, astrology_period
+- 设备设置: 5 POST + 1 GET（不是 MCP，是 REST）— `/api/v1/setting/*`
 
 ## 开发约定
 - 引擎统一接口: `ChartRequest` → `ChartResult`，通过 `@register()` 装饰器注册
