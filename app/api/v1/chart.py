@@ -152,6 +152,38 @@ async def calc_liuyao(body: LiuyaoBody, _: str = Depends(verify_api_token)):
                                extra={"yao_codes": body.yao_codes}))
 
 
+@router.post("/liuyao/verdict", summary="六爻算法断卦（直接 TTS，不走 LLM）")
+async def verdict_liuyao(body: LiuyaoBody, _: str = Depends(verify_api_token)):
+    """返回纯算法断卦结论。设备拿到 tts_text 字段即可直接朗读，无需经过 LLM。
+
+    返回字段:
+        chart_id   排盘 id
+        gua_name   卦名
+        verdict    完整断卦摘要 (含用神/月日生克/四神/吉凶倾向)
+        tts_text   TTS 友好版口语化结论 (80~150 字)
+        yongshen   用神信息 {qin6, positions, wuxing, source}
+        four_gods  {yuan, ji, chou}
+        guashen    卦身地支
+    """
+    result = await _calc(
+        "liuyao", name="占问", birth_date=body.birth_date or _today(),
+        birth_time="6", gender=body.gender, question=body.question,
+        extra={"yao_codes": body.yao_codes},
+    )
+    a = result["raw_data"].get("analysis") or {}
+    if "error" in a:
+        return success({"chart_id": result["chart_id"], "error": a["error"]})
+    return success({
+        "chart_id": result["chart_id"],
+        "gua_name": result["raw_data"]["data"].get("name"),
+        "verdict": a.get("summary"),
+        "tts_text": a.get("tts_text"),
+        "yongshen": a.get("yongshen"),
+        "four_gods": a.get("four_gods"),
+        "guashen": a.get("guashen"),
+    })
+
+
 @router.post("/qimen/calc", summary="奇门遁甲")
 async def calc_qimen(body: DivinationBody, _: str = Depends(verify_api_token)):
     return success(await _calc("qimen", name="占问", birth_date=body.birth_date or _today(),

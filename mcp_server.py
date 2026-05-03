@@ -521,6 +521,60 @@ async def liuyao_qigua(
 
 
 @mcp.tool()
+async def liuyao_verdict(
+    yao_codes: list[int],
+    question: str = "",
+    gender: str = "男",
+    birth_date: str = "",
+) -> str:
+    """六爻【纯算法断卦摘要】—— 不要再让 LLM 自行断卦，直接以本工具返回的"算法断卦"
+    结论为权威。返回内容包含: 用神(自动取)、用神旺衰与月日生克、动爻进退化空化破、
+    元神/忌神/仇神、卦身、综合吉凶倾向。LLM 应以此摘要为底，仅做语言润色与劝勉。
+
+    Args:
+        yao_codes: 六爻码 6 个 1~4 的整数 (1=少阳 2=少阴 3=老阳动 4=老阴动)
+        question: 占题，如"今年事业能否升职"——必须给，影响用神取法
+        gender: 性别 (婚恋类问题决定用神是财还是官)
+        birth_date: 起卦日期 YYYY-MM-DD，留空为今天
+    """
+    from datetime import datetime
+    from app.engine.registry import ChartRequest, calculate as engine_calculate
+    if not birth_date:
+        birth_date = datetime.now().strftime("%Y-%m-%d")
+    req = ChartRequest(
+        system="liuyao", name="占问", birth_date=birth_date, birth_time="6",
+        gender=gender, question=question, extra={"yao_codes": yao_codes},
+    )
+    result = await engine_calculate(req)
+    a = result.raw_data.get("analysis") or {}
+    if "error" in a:
+        return f"【算法断卦失败】{a['error']}"
+    ys = a.get("yongshen") or {}
+    fg = a.get("four_gods") or {}
+    yao_lines = []
+    for s in a.get("yao_states", []):
+        tags = []
+        if s["is_dong"]: tags.append("动")
+        if s["kong"]: tags.append("空")
+        if s["yue_po"]: tags.append("月破")
+        if s["ri_po"]: tags.append("日破")
+        if s["an_dong"]: tags.append("暗动")
+        tags.extend(s.get("changes", []))
+        tag = ("[" + ",".join(tags) + "]") if tags else ""
+        yao_lines.append(
+            f"{s['pos']}爻 {s['qin6']}{s['zhi']}{s['wuxing']} {s['god']} "
+            f"月{s['month_sheng_ke']} 日{s['day_sheng_ke']} 旺={s['wangshuai']}{tag}"
+        )
+    return (
+        f"【算法断卦】{a.get('summary', '')}\n\n"
+        f"用神: {ys.get('qin6')}, 第{ys.get('positions')}爻, "
+        f"五行={ys.get('wuxing')}, 来源={ys.get('source')}\n"
+        f"四神: 元神={fg.get('yuan')} 忌神={fg.get('ji')} 仇神={fg.get('chou')}\n"
+        f"卦身: {a.get('guashen')}\n\n爻象:\n" + "\n".join(yao_lines)
+    )
+
+
+@mcp.tool()
 async def astrology(
     name: str = "",
     birth_date: str = "",
