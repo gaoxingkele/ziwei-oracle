@@ -40,7 +40,7 @@ def _calc(topic: str, t: datetime, numbers: list[int] | None = None) -> dict[str
     hu_lo = _BY_LINES[tuple(base[1:4])]; hu_up = _BY_LINES[tuple(base[2:5])]
     chg = base.copy(); chg[mv - 1] = 1 - chg[mv - 1]
     chg_lo = _BY_LINES[tuple(chg[:3])]; chg_up = _BY_LINES[tuple(chg[3:])]
-    ti = up if mv > 3 else lo; yong = lo if mv > 3 else up
+    ti = lo if mv > 3 else up; yong = up if mv > 3 else lo
     return {
         "upper_trigram": up.name, "lower_trigram": lo.name,
         "base_gua": f"上{up.name}下{lo.name}", "mutual_gua": f"上{hu_up.name}下{hu_lo.name}",

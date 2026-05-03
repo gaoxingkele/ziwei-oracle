@@ -20,3 +20,9 @@ async def test_liuyao_calculate():
     result = await calculate(req)
     assert result.system == "liuyao"
     assert result.raw_data.get("params") == [2, 2, 1, 2, 4, 2]
+
+@pytest.mark.asyncio
+async def test_liuyao_yao_codes_list():
+    req = ChartRequest(system="liuyao", name="测试", birth_date="2026-03-22", birth_time="午", gender="男", question="事业", extra={"yao_codes": [2, 2, 1, 2, 4, 2]})
+    result = await calculate(req)
+    assert result.raw_data.get("params") == [2, 2, 1, 2, 4, 2]

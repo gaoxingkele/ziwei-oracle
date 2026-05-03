@@ -6,13 +6,16 @@ from app.engine.registry import ChartRequest, ChartResult, register
 
 from app.najia import Najia
 
-def _normalize_params(raw: str) -> list[int]:
-    items = (raw or "").strip().split()
+def _normalize_params(raw: Any) -> list[int]:
+    if isinstance(raw, (list, tuple)):
+        items = list(raw)
+    else:
+        items = (str(raw) if raw is not None else "").strip().split()
     vals: list[int] = []
     for token in items[:6]:
         try:
             v = int(token)
-        except ValueError:
+        except (ValueError, TypeError):
             v = 2
         vals.append(max(1, min(4, v)))
     while len(vals) < 6:
@@ -21,7 +24,9 @@ def _normalize_params(raw: str) -> list[int]:
 
 @register("liuyao")
 def calculate_liuyao_engine(req: ChartRequest) -> ChartResult:
-    code = req.extra.get("liuyao_code", "2 2 2 2 2 2")
+    code = req.extra.get("yao_codes")
+    if code is None:
+        code = req.extra.get("liuyao_code", "2 2 2 2 2 2")
     params = _normalize_params(code)
     use_date = datetime.now().strftime("%Y-%m-%d %H:%M")
     obj = Najia(verbose=2).compile(
