@@ -356,7 +356,11 @@ def _build_tts(
     parts: list[str] = []
     q = (question or "").strip()
     if q:
-        parts.append(f"占问{q}。")
+        # 用户原话末尾若已有标点(？！。.?!)，不再追加句号
+        if q[-1] in "？！。.?!":
+            parts.append(f"占问{q}")
+        else:
+            parts.append(f"占问{q}。")
 
     if not yong["positions"]:
         parts.append(f"用神{yong['qin6']}不上卦，需取伏神断之。卦身落在{guashen}位。")
