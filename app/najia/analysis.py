@@ -409,10 +409,10 @@ def _build_tts(
     if not yong["positions"]:
         if yong.get("wuxing") and yong.get("fu_zhi"):
             fu_pos = yong.get("fu_position")
-            pos_cn = ("初二三四五六"[fu_pos - 1]) if fu_pos else None
+            pos_phrase = ("初爻", "第二爻", "第三爻", "第四爻", "第五爻", "上爻")[fu_pos - 1] if fu_pos else None
             parts.append(
                 f"用神{yong['qin6']}不上卦，取伏神{yong['fu_zhi']}{yong['wuxing']}"
-                f"{'，伏于第'+pos_cn+'爻下' if pos_cn else ''}。"
+                f"{'，伏于'+pos_phrase+'下' if pos_phrase else ''}。"
                 f"伏神力量弱，需待日辰或飞神提拔。"
             )
         else:
@@ -422,19 +422,24 @@ def _build_tts(
 
     primary = yong.get("primary") or yong["positions"][0]
     ys = yao_states[primary - 1]
-    pos_cn = "初二三四五六"[primary - 1]
-    parts.append(f"用神{ys['qin6']}，{ys['zhi']}{ys['wuxing']}居第{pos_cn}爻。")
+    # 1=初爻、6=上爻 (传统称呼)，2~5=第二/三/四/五爻
+    pos_phrase = ("初爻", "第二爻", "第三爻", "第四爻", "第五爻", "上爻")[primary - 1]
+    parts.append(f"用神{ys['qin6']}，{ys['zhi']}{ys['wuxing']}居{pos_phrase}。")
 
     sk_phrase = {
         "比和": "与月令比和", "生": "爻生月令", "克": "爻克月令",
         "被生": "得月令生扶", "被克": "受月令克制",
     }
     parts.append(sk_phrase[ys["month_sheng_ke"]] + "，")
-    sk_phrase_d = {
-        "比和": "日辰临之", "生": "爻生日辰", "克": "爻克日辰",
-        "被生": "日辰生爻", "被克": "日辰克爻",
-    }
-    parts.append(sk_phrase_d[ys["day_sheng_ke"]] + "。")
+    # 日辰: 区分"临"(同支)和"比和"(异支同行)
+    if ys.get("day_relation") == "临":
+        parts.append("日辰临爻。")
+    else:
+        sk_phrase_d = {
+            "比和": "日月同气", "生": "爻生日辰", "克": "爻克日辰",
+            "被生": "日辰生爻", "被克": "日辰克爻",
+        }
+        parts.append(sk_phrase_d[ys["day_sheng_ke"]] + "。")
 
     flags: list[str] = []
     if ys["kong"]: flags.append("旬空")
