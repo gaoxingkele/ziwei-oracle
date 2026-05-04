@@ -41,29 +41,50 @@ def _parse_hour_minute(time_str: str) -> tuple[int, int]:
 
 
 def _build_qigua_text(d: dict[str, Any]) -> str:
-    lines = ["----------周易筮法----------"]
-    lines.append(f"日期：{d.get('日期', '未知')}")
+    lines = ["══════════ 周易大衍筮法 ══════════"]
+    lines.append(f"日期：{d.get('日期', '?')}")
 
     dayansf = d.get("大衍筮法", [])
     if dayansf and len(dayansf) >= 3:
-        lines.append(f"爻数：{dayansf[0]}")
-        lines.append(f"本卦：{dayansf[1]}")
-        lines.append(f"之卦：{dayansf[2]}")
+        lines += [
+            "",
+            "──── 起卦 ────",
+            f"  爻数：{dayansf[0]}",
+            f"  本卦：{dayansf[1]}",
+            f"  之卦：{dayansf[2]}",
+        ]
         if len(dayansf) > 3 and isinstance(dayansf[3], dict):
+            lines.append("  动爻爻辞：")
             for yao_idx, yao_text in dayansf[3].items():
-                lines.append(f"  {yao_text}")
+                lines.append(f"    {yao_text}")
 
-    bengua = d.get("本卦", {})
-    if bengua:
-        lines.append(f"\n【本卦】{bengua.get('卦', '')}")
-        lines.append(f"  五星：{bengua.get('五星', '')}")
-        lines.append(f"  世应：{bengua.get('世應卦', '')}")
+    for tag, key in [("本卦", "本卦"), ("之卦", "之卦")]:
+        gua = d.get(key, {})
+        if not gua:
+            continue
+        lines += ["", f"──── 【{tag}】{gua.get('卦', '?')} ────"]
+        for field, label in [
+            ("五星", "五星"), ("世應卦", "世应"), ("六親用神", "六亲用神"),
+            ("納甲", "纳甲"), ("五行", "五行"), ("星宿", "星宿"),
+        ]:
+            v = gua.get(field)
+            if v is None:
+                continue
+            if isinstance(v, (list, tuple)):
+                v = "、".join(str(x) for x in v)
+            elif isinstance(v, dict):
+                v = "、".join(f"{k}={x}" for k, x in v.items())
+            lines.append(f"  {label}：{v}")
 
-    zhigua = d.get("之卦", {})
-    if zhigua:
-        lines.append(f"\n【之卦】{zhigua.get('卦', '')}")
-        lines.append(f"  五星：{zhigua.get('五星', '')}")
-        lines.append(f"  世应：{zhigua.get('世應卦', '')}")
+    fei = d.get("飛神")
+    if fei:
+        if isinstance(fei, (list, tuple)):
+            fei_str = "、".join(str(x) for x in fei)
+        elif isinstance(fei, dict):
+            fei_str = "、".join(f"{k}={v}" for k, v in fei.items())
+        else:
+            fei_str = str(fei)
+        lines += ["", f"──── 飞神 ────", f"  {fei_str}"]
 
     return "\n".join(lines)
 

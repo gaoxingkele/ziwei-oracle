@@ -23,21 +23,35 @@ def calculate_ziwei(req: ChartRequest) -> ChartResult:
 
 def _build_text(d: dict[str, Any]) -> str:
     lines = [
-        "----------基本信息----------",
-        f"命主性别：{d.get('gender', '未知')}",
-        f"阳历生日：{d.get('solarDate', '未知')}",
-        f"阴历生日：{d.get('lunarDate', '未知')}",
-        f"八字：{d.get('chineseDate', '未知')}",
-        f"生辰时辰：{d.get('time', '未知')} ({d.get('timeRange', '未知')})",
-        f"星座：{d.get('sign', '未知')}",
-        f"生肖：{d.get('zodiac', '未知')}",
-        f"命宫地支：{d.get('earthlyBranchOfSoulPalace', '未知')}",
-        f"五行局：{d.get('fiveElementsClass', '未知')}",
-        "----------宫位信息----------",
+        "══════════ 紫微斗数 ══════════",
+        f"性别: {d.get('gender', '?')}  星座: {d.get('sign', '?')}  生肖: {d.get('zodiac', '?')}",
+        f"阳历: {d.get('solarDate', '?')}  阴历: {d.get('lunarDate', '?')}",
+        f"八字: {d.get('chineseDate', '?')}  时辰: {d.get('time', '?')} ({d.get('timeRange', '?')})",
+        f"命宫地支: {d.get('earthlyBranchOfSoulPalace', '?')}  五行局: {d.get('fiveElementsClass', '?')}",
+        "",
+        "──── 十二宫详盘 ────",
     ]
     for p in d.get("palaces") or []:
         name = p.get("name", "?")
+        zhi = p.get("earthlyBranch") or p.get("heavenlyStem") or ""
         major = p.get("majorStars") or []
-        stars = ", ".join(f"{s.get('name', '')}({s.get('brightness', '')})" for s in major)
-        lines.append(f"[{name}] 主星: {stars or '无'}")
+        minor = p.get("minorStars") or []
+        adj = p.get("adjectiveStars") or []
+        chg = p.get("changeStars") or []  # 四化
+        major_str = "、".join(
+            f"{s.get('name', '')}{('('+s.get('brightness', '')+')') if s.get('brightness') else ''}"
+            for s in major
+        ) or "—"
+        minor_str = "、".join(s.get("name", "") for s in minor) or "—"
+        adj_str = "、".join(s.get("name", "") for s in adj) or "—"
+        chg_str = "、".join(
+            f"{s.get('name', '')}化{s.get('mutagen', '?')}" for s in chg
+        ) if chg else "—"
+        lines.append(
+            f"[{name}{('-'+zhi) if zhi else ''}]"
+        )
+        lines.append(f"    主星: {major_str}")
+        lines.append(f"    辅星: {minor_str}")
+        lines.append(f"    杂耀: {adj_str}")
+        lines.append(f"    四化: {chg_str}")
     return "\n".join(lines)

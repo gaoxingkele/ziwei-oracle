@@ -38,3 +38,4 @@ Thumbs.db
 # 本地工具运行时产物
 .omx/
 as.log
+verdict_out.json

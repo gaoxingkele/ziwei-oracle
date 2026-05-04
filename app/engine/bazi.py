@@ -122,13 +122,15 @@ def _build_text(d: dict[str, Any]) -> str:
     ]
 
     ss = d["shi_shen"]
+    # 日主天干 (日柱第一字) — 用于解读日主强弱
+    day_gan_char = p['day']['gan_zhi'][0] if p['day'].get('gan_zhi') else ''
     lines += [
         "",
         "──── 十神 ────",
-        f"  年: {ss['year_gan']}({','.join(ss['year_zhi'])})",
-        f"  月: {ss['month_gan']}({','.join(ss['month_zhi'])})",
-        f"  日: 日主({','.join(ss['day_zhi'])})",
-        f"  时: {ss['hour_gan']}({','.join(ss['hour_zhi'])})",
+        f"  年干: {ss['year_gan']}  年支藏: {','.join(ss['year_zhi'])}",
+        f"  月干: {ss['month_gan']}  月支藏: {','.join(ss['month_zhi'])}",
+        f"  日主: {day_gan_char} (本气)  日支藏: {','.join(ss['day_zhi'])}",
+        f"  时干: {ss['hour_gan']}  时支藏: {','.join(ss['hour_zhi'])}",
     ]
 
     hg = d["hide_gan"]
@@ -163,7 +165,9 @@ def _build_text(d: dict[str, Any]) -> str:
         "",
         "──── 旬空 ────",
         f"  年: {xk['year_xun']}旬 空亡{xk['year_kong']}",
+        f"  月: {xk['month_xun']}旬 空亡{xk['month_kong']}",
         f"  日: {xk['day_xun']}旬 空亡{xk['day_kong']}",
+        f"  时: {xk['hour_xun']}旬 空亡{xk['hour_kong']}",
     ]
 
     dy_info = d["da_yun"]
