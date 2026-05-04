@@ -1,0 +1,43 @@
+name: Deploy to Production
+
+# 触发条件：push 到 master 分支
+# 启用前置条件（在 GitHub repo Settings → Secrets and variables → Actions 配置）：
+#   DEPLOY_HOST     云端服务器 IP / 域名
+#   DEPLOY_USER     ssh 登录用户名（需 sudo systemctl 权限）
+#   DEPLOY_SSH_KEY  ssh 私钥（id_rsa 内容，云端需把对应公钥加到 ~/.ssh/authorized_keys）
+#   DEPLOY_PATH     ds-oracle 仓库在云端的绝对路径，如 /home/ubuntu/ds-oracle
+#
+# 任一 secret 缺失则跳过本 job（不报错），保证未配置时也不挂 CI。
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check secrets
+        id: precheck
+        run: |
+          if [ -z "${{ secrets.DEPLOY_HOST }}" ]; then
+            echo "deploy_secrets_missing=true" >> $GITHUB_OUTPUT
+            echo "::warning::DEPLOY_HOST secret not set; skipping deploy."
+          else
+            echo "deploy_secrets_missing=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Setup SSH
+        if: steps.precheck.outputs.deploy_secrets_missing == 'false'
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Run deploy.sh on remote
+        if: steps.precheck.outputs.deploy_secrets_missing == 'false'
+        run: |
+          ssh "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            "cd ${{ secrets.DEPLOY_PATH }} && ./scripts/deploy.sh"
