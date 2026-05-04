@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from .yongshen import take_yongshen
+from . import const as _const
 
 # ── 五行 / 地支基础 ───────────────────────────────────────────────
 ZHI_ORDER = "子丑寅卯辰巳午未申酉戌亥"
@@ -86,6 +87,17 @@ def _zhi_pair_relation(z1: str, z2: str) -> str:
     if LIUHE_PAIRS.get(z1) == z2:
         return "合"
     return "无"
+
+
+# ── 互卦 (najia 库不输出, 借鉴梅花算法) ────────────────────────────
+def _hu_gua_name(mark: str) -> str | None:
+    """互卦: 下互=二三四爻, 上互=三四五爻。返回 64 卦名。"""
+    if not mark or len(mark) != 6:
+        return None
+    hu_lo = mark[1:4]   # 二三四爻
+    hu_up = mark[2:5]   # 三四五爻
+    hu_mark = hu_lo + hu_up
+    return _const.GUA64.get(hu_mark)
 
 
 # ── 卦身 ─────────────────────────────────────────────────────────
@@ -188,36 +200,46 @@ def _analyze_yao(
 # ── 用神 / 元忌仇神 ───────────────────────────────────────────────
 def _select_yongshen(
     yao_states: list[dict[str, Any]], shi_pos: int,
-    question: str, gender: str,
+    question: str, gender: str, hide: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """取用神，返回 {qin6, positions, wuxing, source}。
+    """取用神，返回 {qin6, positions, wuxing, source, ...}。
 
-    若取到的六亲在卦中无现 (六亲不全) → 用神为伏神，positions 空。
-    若 question 未命中规则 → 默认以世爻为用神。
+    优先级：
+    1. 命中关键词且本卦有该六亲 → 取本卦该爻
+    2. 命中关键词但本卦无该六亲 → 取伏神（从 najia 的 hide 字段找）
+    3. 未命中关键词 → 默认以世爻为用神
     """
     qin = take_yongshen(question, gender)
     if qin is None:
-        # 默认世爻
         st = yao_states[shi_pos - 1]
         return {
             "qin6": st["qin6"], "positions": [shi_pos],
             "wuxing": st["wuxing"], "source": "世爻(默认)",
         }
     positions = [s["pos"] for s in yao_states if s["qin6"] == qin]
-    if not positions:
-        return {"qin6": qin, "positions": [], "wuxing": None, "source": "伏神(卦中无现)"}
-    # 多爻同六亲时，传统取动爻 > 临世应 > 旺相 > 取首位；这里取持世/动爻优先，否则首爻
-    dong_pos = [p for p in positions if yao_states[p - 1]["is_dong"]]
-    if dong_pos:
-        chosen = dong_pos[0]
-    elif shi_pos in positions:
-        chosen = shi_pos
-    else:
-        chosen = positions[0]
-    return {
-        "qin6": qin, "positions": positions, "primary": chosen,
-        "wuxing": yao_states[chosen - 1]["wuxing"], "source": "关键词匹配",
-    }
+    if positions:
+        # 多爻同六亲：动爻 > 持世 > 首位
+        dong_pos = [p for p in positions if yao_states[p - 1]["is_dong"]]
+        chosen = dong_pos[0] if dong_pos else (shi_pos if shi_pos in positions else positions[0])
+        return {
+            "qin6": qin, "positions": positions, "primary": chosen,
+            "wuxing": yao_states[chosen - 1]["wuxing"], "source": "关键词匹配",
+        }
+    # 本卦无该六亲 → 找伏神
+    # najia hide: { 'qin6': [本宫卦6亲], 'qinx': [本宫卦6支], 'seat': [飞神位置列表] }
+    if hide and isinstance(hide.get("qin6"), list) and qin in hide["qin6"]:
+        idx = hide["qin6"].index(qin)
+        fu_qinx = hide["qinx"][idx]   # 如 '辛酉金'
+        fu_zhi = fu_qinx[1] if len(fu_qinx) >= 2 else None
+        fu_wx = fu_qinx[2] if len(fu_qinx) >= 3 else None
+        # 伏神在原卦同爻位之下（hide.qin6 的索引 = 原卦爻位 - 1）
+        fu_pos = idx + 1
+        return {
+            "qin6": qin, "positions": [], "primary": None,
+            "wuxing": fu_wx, "fu_zhi": fu_zhi, "fu_position": fu_pos,
+            "fu_qinx": fu_qinx, "source": f"伏神({hide.get('name', '本宫卦')})",
+        }
+    return {"qin6": qin, "positions": [], "wuxing": None, "source": "伏神(卦中无现且 hide 不可解析)"}
 
 
 def _four_gods(yong_wx: str | None) -> dict[str, str | None]:
@@ -236,8 +258,21 @@ def _build_summary(
     fg: dict[str, str | None], guashen: str,
 ) -> str:
     """生成 2~5 句断卦摘要。"""
+    # 用神不上卦 + 找到伏神：基于伏神判断
+    if not yong["positions"] and yong.get("wuxing") and yong.get("fu_zhi"):
+        fu_zhi = yong["fu_zhi"]
+        fu_wx = yong["wuxing"]
+        fu_pos = yong.get("fu_position")
+        # 伏神能否得用：伏神被日辰生扶或月建生扶 → 有用；被克或冲 → 无用
+        # 简化：看伏神五行与月日的生克
+        # （此处只做粗判，详细伏吟/提拔逻辑后续再加）
+        return (
+            f"用神({yong['qin6']}) 不上卦, 取伏神 {fu_zhi}{fu_wx}"
+            f"{'(伏于第'+str(fu_pos)+'爻下)' if fu_pos else ''}. "
+            f"伏神需待日辰提拔或飞神生伏才能得用, 力量较弱. 卦身: {guashen}."
+        )
     if not yong["positions"]:
-        return f"用神({yong['qin6']}) 不上卦, 需取伏神. 卦身: {guashen}."
+        return f"用神({yong['qin6']}) 不上卦且伏神不明, 需重新取用神. 卦身: {guashen}."
 
     primary = yong.get("primary") or yong["positions"][0]
     ys = yao_states[primary - 1]
@@ -332,11 +367,16 @@ def analyze(data: dict[str, Any], question: str = "", gender: str = "") -> dict[
         qinx, qin6, god6, params, dong, bian_qinx, bian_qin6, hide, gz, xkong,
     )
     guashen = _calc_guashen(shi_pos, params)
-    yong = _select_yongshen(yao_states, shi_pos, question, gender)
+    yong = _select_yongshen(yao_states, shi_pos, question, gender, hide=hide)
     fg = _four_gods(yong.get("wuxing"))
     summary = _build_summary(yao_states, yong, fg, guashen)
 
     tts_text = _build_tts(yao_states, yong, fg, guashen, question, gz)
+    # 卦名三件套：本卦 / 互卦 / 变卦
+    ben_gua_name = data.get("name")
+    bian_gua_name = bian.get("name") if bian else None
+    hu_gua_name = _hu_gua_name(data.get("mark"))
+    dong_pos_1based = [i + 1 for i in dong]
     return {
         "yao_states": yao_states,
         "guashen": guashen,
@@ -344,6 +384,10 @@ def analyze(data: dict[str, Any], question: str = "", gender: str = "") -> dict[
         "four_gods": fg,
         "summary": summary,
         "tts_text": tts_text,
+        "ben_gua": ben_gua_name,
+        "hu_gua": hu_gua_name,
+        "bian_gua": bian_gua_name,
+        "dong_yao": dong_pos_1based,
     }
 
 
@@ -363,7 +407,17 @@ def _build_tts(
             parts.append(f"占问{q}。")
 
     if not yong["positions"]:
-        parts.append(f"用神{yong['qin6']}不上卦，需取伏神断之。卦身落在{guashen}位。")
+        if yong.get("wuxing") and yong.get("fu_zhi"):
+            fu_pos = yong.get("fu_position")
+            pos_cn = ("初二三四五六"[fu_pos - 1]) if fu_pos else None
+            parts.append(
+                f"用神{yong['qin6']}不上卦，取伏神{yong['fu_zhi']}{yong['wuxing']}"
+                f"{'，伏于第'+pos_cn+'爻下' if pos_cn else ''}。"
+                f"伏神力量弱，需待日辰或飞神提拔。"
+            )
+        else:
+            parts.append(f"用神{yong['qin6']}不上卦，难断。")
+        parts.append(f"卦身落在{guashen}位。")
         return "".join(parts)
 
     primary = yong.get("primary") or yong["positions"][0]

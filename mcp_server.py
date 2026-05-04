@@ -596,10 +596,26 @@ async def liuyao_verdict(
             f"{s['pos']}爻 {s['qin6']}{s['zhi']}{s['wuxing']} {s['god']} "
             f"月{s['month_sheng_ke']} 日{s['day_sheng_ke']} 旺={s['wangshuai']}{tag}"
         )
+    ben = a.get("ben_gua") or "?"
+    hu = a.get("hu_gua") or "?"
+    bian = a.get("bian_gua") or "(无变卦/无动爻)"
+    dong = a.get("dong_yao") or []
+    dong_str = "、".join(f"第{p}爻" for p in dong) if dong else "(静卦无动爻)"
+    fu_info = ""
+    if not ys.get("positions") and ys.get("wuxing") and ys.get("fu_zhi"):
+        fu_info = (
+            f"\n  伏神: {ys.get('fu_qinx', ys.get('fu_zhi'))} "
+            f"(伏于第{ys.get('fu_position')}爻下)"
+        )
     return (
         f"【算法断卦】{a.get('summary', '')}\n\n"
-        f"用神: {ys.get('qin6')}, 第{ys.get('positions')}爻, "
-        f"五行={ys.get('wuxing')}, 来源={ys.get('source')}\n"
+        f"卦象三件套:\n"
+        f"  本卦: {ben}\n"
+        f"  互卦: {hu}\n"
+        f"  变卦: {bian}\n"
+        f"  动爻: {dong_str}\n\n"
+        f"用神: {ys.get('qin6')}, 第{ys.get('positions') or '(本卦无现)'}爻, "
+        f"五行={ys.get('wuxing')}, 来源={ys.get('source')}{fu_info}\n"
         f"四神: 元神={fg.get('yuan')} 忌神={fg.get('ji')} 仇神={fg.get('chou')}\n"
         f"卦身: {a.get('guashen')}\n\n爻象:\n" + "\n".join(yao_lines)
     )

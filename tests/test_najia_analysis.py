@@ -93,6 +93,32 @@ async def test_analyze_default_world_yao():
 
 
 @pytest.mark.asyncio
+async def test_yongshen_falls_to_fushen_when_qin6_absent():
+    """山雷颐 (六亲不全, 缺官鬼/子孙) 求考试 → 用神官鬼应取伏神。
+
+    回归: 早期 _select_yongshen 在 positions 空时直接 return wuxing=None,
+    导致四神/verdict/tts 全部塌掉。修复后应从 hide 字段取出辛酉金作伏神。
+    """
+    obj = Najia(verbose=2).compile(
+        params=[3, 2, 2, 2, 2, 1], date="2026-05-04 12:00",
+        gender="男", title="考试", guaci=False,
+    )
+    result = analyze(obj.data, question="考试会不会好", gender="男")
+    yong = result["yongshen"]
+    assert yong["qin6"] == "官鬼"
+    assert yong["positions"] == []           # 本卦无官鬼
+    assert yong["wuxing"] == "金"            # 伏神是辛酉金
+    assert yong["fu_zhi"] == "酉"
+    assert yong["fu_position"] == 3
+    assert "伏神" in yong["source"]
+    # 四神基于伏神五行计算: 金的元神=土、忌神=火、仇神=木
+    assert result["four_gods"] == {"yuan": "土", "ji": "火", "chou": "木"}
+    # summary/tts 必须含伏神信息
+    assert "伏神" in result["summary"] and "酉金" in result["summary"]
+    assert "伏神" in result["tts_text"] and "酉金" in result["tts_text"]
+
+
+@pytest.mark.asyncio
 async def test_dong_yao_changes_detection():
     """动爻应有 changes 字段填充。"""
     obj = Najia(verbose=2).compile(

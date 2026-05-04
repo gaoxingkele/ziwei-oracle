@@ -176,6 +176,10 @@ async def verdict_liuyao(body: LiuyaoBody, _: str = Depends(verify_api_token)):
     return success({
         "chart_id": result["chart_id"],
         "gua_name": result["raw_data"]["data"].get("name"),
+        "ben_gua": a.get("ben_gua"),
+        "hu_gua": a.get("hu_gua"),
+        "bian_gua": a.get("bian_gua"),
+        "dong_yao": a.get("dong_yao"),
         "verdict": a.get("summary"),
         "tts_text": a.get("tts_text"),
         "yongshen": a.get("yongshen"),
