@@ -29,7 +29,7 @@ cd /path/to/ds-oracle
 2. 检测 ephem/ichingshifa 装没装，缺则跑 `pip install -r requirements.txt`（或 `--full` 强制）
 3. `pytest tests/` 跑回归测试，失败中止部署
 4. `systemctl restart ds-oracle-mcp` + `ds-oracle-api`
-5. `curl` 健康检查 :8811 和 :8000
+5. `curl` 健康检查 :8811 和 :8812
 
 ## systemd 服务定义
 
@@ -50,7 +50,7 @@ Environment=PYTHONIOENCODING=utf-8
 WantedBy=multi-user.target
 ```
 
-`/etc/systemd/system/ds-oracle-api.service`：把 ExecStart 改成 `uvicorn app.main:app --host 0.0.0.0 --port 8000` 即可。
+`/etc/systemd/system/ds-oracle-api.service`：把 ExecStart 改成 `uvicorn app.main:app --host 0.0.0.0 --port 8812` 即可。
 
 启用：
 ```bash

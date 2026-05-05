@@ -29,7 +29,7 @@
   - 修了 calendar_resolve("今年") 立春前误判 ganzhi_year 的 bug（改用区间中点）
 - 进行中: —
 - 待办:
-  1. xiaozhi-esp32-server 接入实测（ds-oracle FastAPI 8000 端口需让位，建议改 8010）
+  1. 硬件 SmartRing-Plus mazu_display.cc:1890 把 addon 里 `liuyao(...)` 改 `liuyao_verdict(...)`，下次 OTA 顺带
   2. 项目状态/CLAUDE.md 同步到 memory/project_status.md
 
 ## 关键决策记录
@@ -37,14 +37,20 @@
 - 2026-04-26: 时段类提问统一走 *_period 工具，禁止 LLM 自行做农历换算/月柱推算/刑冲合害。原因: LLM 算术不可靠，必须由引擎权威给出。
 - 2026-04-25: 新增 calendar_resolve + 3 个 period 工具，作为时段类提问的标准前置/批量出口。
 
+## 端口约定（已编排，互不冲突）
+- DS-Oracle FastAPI: **8812**（设定接口 + 命理 REST）
+- DS-Oracle MCP Server: **8811**（LLM 调用入口）
+- 小智 xiaozhi-server: 8765 ws + 8003 http（已避让，永久写入其 .config.yaml）
+- ngrok: 把 :8811 转发到公网
+
 ## 已知问题 / 坑
-- DS-Oracle FastAPI 默认 :8000 与小智 xiaozhi-server :8000 ws 端口冲突，本机同时跑需改一边端口。
 - LLM 容易直接引用 calendar_resolve.ganzhi_year_solar 当流年，必须确保它和 by_period.ganzhi_month 算法一致（已修）。
+- pytest 9 + Python 3.14 在 stdout capture 模块有 bug（`I/O operation on closed file`），逐文件跑测试可绕开。
 
 ## 最近一次中断时的状态
-- 正在做: v3 时段工具收尾，所有 commit 已 push 到 origin/master
-- 下一步应该: 用户要求并行启动 4 个服务器（小智 xiaozhi-server + manager-api + DS-Oracle MCP + DS-Oracle 设定服务器），需先解决 8000 端口冲突
-- 卡在哪: 等用户确认第 4 个服务器是不是 manager-api，以及 ds-oracle FastAPI 改用哪个端口
+- 正在做: liuyao_verdict 全链路 + 4 引擎字段全暴露 + LLM 通俗化铁律已落地，commit 全部 push 到 origin/master
+- 下一步应该: 硬件 SmartRing-Plus 下次 OTA 时把 mazu_display.cc:1890 的 `liuyao` addon 改成 `liuyao_verdict`
+- 卡在哪: 无
 
 ## 技术栈
 - Python 3.10+, FastAPI, Pydantic, SQLAlchemy (async)
@@ -61,8 +67,9 @@
 - `docs/mcp-trigger-prompts.md` — 15 个工具的语音唤醒提示词
 - `docs/mcp-system-prompt.md` — 大模型调度指南（意图路由/反问策略/解读风格）
 
-## MCP Tools（24 个）
+## MCP Tools（25 个）
 - 命理 (15): ziwei, bazi, meihua, liuyao, liuyao_qigua, astrology, qimen, liuren, iching, qianwen, jiemeng, name_analysis, hehun, almanac, jiri
+- 算法断卦 (1): **liuyao_verdict** — 用神/旺衰/动变/四神/吉凶倾向，LLM 仅做白话翻译
 - 签文专用 (4): qianwen_guanyin, qianwen_huangdaxian, qianwen_zhuge, qianwen_mazu
 - 时段/解析 (4): calendar_resolve, ziwei_period, bazi_period, astrology_period
 - 设备设置: 5 POST + 1 GET（不是 MCP，是 REST）— `/api/v1/setting/*`
@@ -80,7 +87,7 @@
 python mcp_server.py --port 8811
 
 # API Server
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8812
 
 # CLI
 python cli.py

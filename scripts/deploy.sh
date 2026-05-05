@@ -70,10 +70,10 @@ if curl -sf -m 5 "http://127.0.0.1:8811/" -o /dev/null; then
 else
     echo "  ⚠ MCP :8811 未响应（首次启动可能需 5~10 秒）"
 fi
-if curl -sf -m 5 "http://127.0.0.1:8000/api/v1/chart/systems" -H "X-API-Token: ${API_TOKEN:-}" -o /dev/null; then
-    echo "  ✓ API :8000 响应正常"
+if curl -sf -m 5 "http://127.0.0.1:8812/api/v1/chart/systems" -H "X-API-Token: ${API_TOKEN:-}" -o /dev/null; then
+    echo "  ✓ API :8812 响应正常"
 else
-    echo "  ⚠ API :8000 未响应或鉴权失败（看 .env 的 API_TOKENS）"
+    echo "  ⚠ API :8812 未响应或鉴权失败（看 .env 的 API_TOKENS）"
 fi
 
 echo "▶ 部署完成"

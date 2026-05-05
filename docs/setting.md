@@ -4,7 +4,7 @@
 
 ## 通用配置
 
-- **Base URL**：`http://117.50.48.22:8000/api/v1/setting`
+- **Base URL**：`http://117.50.48.22:8812/api/v1/setting`
 - **device_id 生成规则**：`dev_` + MAC 地址去除冒号后前 12 字符
   - 示例：MAC `39:eb:47:21:84:c4` → `dev_39eb472184c4`
   - 同一设备（浏览器）跨会话保持不变（存 localStorage）
@@ -317,7 +317,7 @@ function _settingHeaders(){
 
 // POST {field}
 async function _callSettingAPI(field, text){
-  const base = App.settings.settingApiBase; // http://117.50.48.22:8000/api/v1/setting
+  const base = App.settings.settingApiBase; // http://117.50.48.22:8812/api/v1/setting
   const url  = base + '/' + field;
   const body = { device_id: _settingDeviceId(), text };
   if (field === 'name') body.lang = 'zh';

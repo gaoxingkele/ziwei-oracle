@@ -2,7 +2,7 @@
 
 > 客户端把用户选择/输入的设置项提交到服务器，服务器**直接校验 + 持久化**（不调 LLM）。适合滚轮选择器、表单输入、扫码等场景。
 
-- **Base URL**：`http://<server>:8000/api/v1/setting`
+- **Base URL**：`http://<server>:8812/api/v1/setting`
 - **认证**：在 `.env` 配置了 `API_TOKENS` 时需要，两种方式任选其一：
   - Header：`Authorization: Bearer <token>`
   - Query：`?token=<token>`
@@ -43,7 +43,7 @@
 
 **请求**
 ```bash
-curl -X POST http://<server>:8000/api/v1/setting/birthday \
+curl -X POST http://<server>:8812/api/v1/setting/birthday \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"device_id":"dev_001","text":"1995-03-03"}'
@@ -72,7 +72,7 @@ curl -X POST http://<server>:8000/api/v1/setting/birthday \
 
 **请求**
 ```bash
-curl -X POST http://<server>:8000/api/v1/setting/birthtime \
+curl -X POST http://<server>:8812/api/v1/setting/birthtime \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"device_id":"dev_001","text":"07:40"}'
@@ -91,7 +91,7 @@ curl -X POST http://<server>:8000/api/v1/setting/birthtime \
 
 **请求**
 ```bash
-curl -X POST http://<server>:8000/api/v1/setting/city \
+curl -X POST http://<server>:8812/api/v1/setting/city \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"device_id":"dev_001","text":"福建永安"}'
@@ -134,7 +134,7 @@ curl -X POST http://<server>:8000/api/v1/setting/city \
 
 **请求**
 ```bash
-curl -X POST http://<server>:8000/api/v1/setting/sex \
+curl -X POST http://<server>:8812/api/v1/setting/sex \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"device_id":"dev_001","text":"男"}'
@@ -151,7 +151,7 @@ curl -X POST http://<server>:8000/api/v1/setting/sex \
 
 **请求**
 ```bash
-curl "http://<server>:8000/api/v1/setting?device_id=dev_001" \
+curl "http://<server>:8812/api/v1/setting?device_id=dev_001" \
   -H "Authorization: Bearer $TOKEN"
 ```
 

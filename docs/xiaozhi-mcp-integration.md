@@ -244,10 +244,10 @@ MCP Endpoint connected, discovered 14 tools:
 
 ```
 同一台机器:
-├── xiaozhi-esp32-server (port 8000)
+├── xiaozhi-esp32-server (port 8765 ws + 8003 http, 已避让)
 ├── mcp-endpoint-server  (port 8004)
-├── DS-Oracle MCP        (stdio, 由 mcp_pipe 启动)
-└── DS-Oracle API        (port 8000, 可选)
+├── DS-Oracle MCP        (stdio, 由 mcp_pipe 启动；或 streamable-http :8811)
+└── DS-Oracle API        (port 8812, 可选)
 ```
 
 ### 分机部署（生产）
@@ -260,7 +260,7 @@ MCP Endpoint connected, discovered 14 tools:
 
 服务器B (DS-Oracle):
 ├── mcp_server.py --transport sse --port 8811   (MCP for 小智)
-├── uvicorn app.main:app --port 8000            (API for 小程序/H5)
+├── uvicorn app.main:app --port 8812            (API for 小程序/H5)
 ```
 
 mcp_config.json 配置远程连接：

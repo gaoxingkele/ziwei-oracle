@@ -10,8 +10,8 @@
 
 | 环境 | 加载文件 | 启动命令 | 设备端 base URL |
 |------|----------|----------|------------------|
-| **本机调试** | `.env.local`（存在则优先） | `python mcp_server.py --host 0.0.0.0 --port 8811` | `http://<本机内网IP>:8000` |
-| **云端线上** | `.env`（无 `.env.local` 时回落） | 同上 | `http://117.50.48.22:8000` |
+| **本机调试** | `.env.local`（存在则优先） | `python mcp_server.py --host 0.0.0.0 --port 8811` | `http://<本机内网IP>:8812` |
+| **云端线上** | `.env`（无 `.env.local` 时回落） | 同上 | `http://117.50.48.22:8812` |
 
 加载逻辑统一在三处入口（`mcp_server.py` / `config.py` / `app/config.py`）：
 **存在 `.env.local` → 用它；否则 → 用 `.env`**。云端机器只要不放 `.env.local`，行为完全不变。
@@ -19,7 +19,7 @@
 **本机起步**：
 ```bash
 cp .env.local.example .env.local   # 按需填 KIMI_API_KEY 等
-uvicorn app.main:app --host 0.0.0.0 --port 8000     # REST API（设备端 setting 调用）
+uvicorn app.main:app --host 0.0.0.0 --port 8812     # REST API（设备端 setting 调用）
 python mcp_server.py --host 0.0.0.0 --port 8811     # MCP Server（LLM 调用）
 ```
 设备端把 base URL 改到本机内网 IP（用 `ipconfig` / `ifconfig` 查），即可联调。
@@ -187,34 +187,34 @@ POST /api/v1/chart/{system}
 TOKEN="your-token"
 
 # 八字排盘
-curl -X POST http://localhost:8000/api/v1/chart/bazi/calc \
+curl -X POST http://localhost:8812/api/v1/chart/bazi/calc \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"name":"张三","birth_date":"1990-05-15","birth_time":"14:00","gender":"男"}'
 
 # 黄道吉日查询
-curl -X POST http://localhost:8000/api/v1/chart/jiri/calc \
+curl -X POST http://localhost:8812/api/v1/chart/jiri/calc \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"activity":"结婚","start_date":"2026-05-01","end_date":"2026-06-01"}'
 
 # 求签
-curl -X POST http://localhost:8000/api/v1/chart/qianwen/calc \
+curl -X POST http://localhost:8812/api/v1/chart/qianwen/calc \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"sign_type":"guanyin","question":"事业发展"}'
 
 # 八字合婚
-curl -X POST http://localhost:8000/api/v1/chart/hehun/calc \
+curl -X POST http://localhost:8812/api/v1/chart/hehun/calc \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"name_a":"张三","birth_date_a":"1990-05-15","birth_time_a":"14:00","gender_a":"男","name_b":"李四","birth_date_b":"1992-08-20","birth_time_b":"9:00","gender_b":"女"}'
 
 # 今日黄历（Query Token）
-curl "http://localhost:8000/api/v1/almanac/today?token=$TOKEN"
+curl "http://localhost:8812/api/v1/almanac/today?token=$TOKEN"
 ```
 
-Swagger 文档：`http://localhost:8000/docs`
+Swagger 文档：`http://localhost:8812/docs`
 
 ---
 
@@ -301,7 +301,7 @@ stdio 模式（本地）：
 
 | # | 服务 | 进程命令 | 监听 | 日志 |
 |---|------|----------|------|------|
-| 1 | DS-Oracle 设定服务器（FastAPI） | `uvicorn app.main:app --host 0.0.0.0 --port 8000` | `0.0.0.0:8000` | `logs_api.log` |
+| 1 | DS-Oracle 设定服务器（FastAPI） | `uvicorn app.main:app --host 0.0.0.0 --port 8812` | `0.0.0.0:8812` | `logs_api.log` |
 | 2 | DS-Oracle MCP Server | `python mcp_server.py --port 8811` | `0.0.0.0:8811` | `logs_mcp.log` |
 | 3 | 小智 xiaozhi-server | `.venv/Scripts/python.exe app.py`（cwd `xiaozhi-esp32-server/main/xiaozhi-server/`） | `127.0.0.1:8765` ws + `127.0.0.1:8003` http | `logs_xz_server.log` / `logs_xz_err.log` |
 | 4 | ngrok 隧道 | `ngrok.exe http 8811` | 公网 `https://uncover-earflap-unspoken.ngrok-free.dev` → 本机 `:8811` | `logs_ngrok.log` |
@@ -309,7 +309,7 @@ stdio 模式（本地）：
 **启动注意事项**：
 
 - **小智 xiaozhi-server 必须用 `.venv/Scripts/python.exe`，不能用系统 `python`**——系统 Python（如 3.14）跑 `app.py` 会因 `opuslib_next` 找不到 opus.dll 启动失败；`.venv` 内置 pyogg 已带 `opus.dll`/`opusenc.dll`/`opusfile.dll`。
-- **8000 端口规划**：xiaozhi-server 默认 ws 端口也是 8000，已在 `xiaozhi-esp32-server/main/xiaozhi-server/data/.config.yaml` 永久改为 8765 避让 DS-Oracle FastAPI。
+- **端口规划**：DS-Oracle FastAPI 用 `8812`（避让 8000 给小智或其他常用服务）；xiaozhi-server 默认 ws 端口本是 8000，已在 `xiaozhi-esp32-server/main/xiaozhi-server/data/.config.yaml` 永久改为 8765；MCP Server 固定 8811；ngrok 公网隧道转发到 8811。
 - **ngrok 单 endpoint 限制**：免费版 `uncover-earflap-unspoken.ngrok-free.dev` 同一时刻只能由一个进程占用；重复启动会被拒（`ERR_NGROK_334`），先 `Get-Process ngrok` 看看是否已有进程在跑。
 - **ngrok 用途**：把本机 `:8811` MCP 服务暴露到公网，供云端小智或外部 LLM 客户端调用，对应仓库支持「本地/云端双环境切换」（commit `9904dce`）。
 
@@ -318,7 +318,7 @@ stdio 模式（本地）：
 ```powershell
 # 终端 1 — 设定服务器
 cd D:\aicoding\ds-oracle-cli
-uvicorn app.main:app --host 0.0.0.0 --port 8000
+uvicorn app.main:app --host 0.0.0.0 --port 8812
 
 # 终端 2 — MCP
 cd D:\aicoding\ds-oracle-cli
@@ -421,7 +421,7 @@ cp .env.example .env
 
 ```bash
 # API 服务（小程序/H5）
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8812
 
 # MCP 服务（大模型工具调用）
 python mcp_server.py --port 8811
@@ -434,7 +434,7 @@ python cli.py
 
 ```bash
 docker compose up -d
-# API: http://localhost:8000
+# API: http://localhost:8812
 ```
 
 ### 引擎测试
