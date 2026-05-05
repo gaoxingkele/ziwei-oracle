@@ -109,6 +109,13 @@ class LifeNumberBody(BaseModel):
     birth_date: str = Field(description="公历生日 YYYY-MM-DD")
 
 
+class LifeNumberPeriodBody(BaseModel):
+    birth_date: str = Field(description="公历生日 YYYY-MM-DD")
+    expr: str = Field(description="时间表达式: 今年/下个月/今天/2026年5月 等")
+    base_date: str = Field(default="", description="基准日期 YYYY-MM-DD, 留空为今天")
+    granularity: str = Field(default="auto", description="auto/year/month/day")
+
+
 async def _calc(system: str, **kwargs) -> dict:
     req = ChartRequest(system=system, **kwargs)
     result = await engine_calculate(req)
@@ -252,6 +259,15 @@ async def calc_almanac(body: AlmanacBody, _: str = Depends(verify_api_token)):
 async def calc_lifenumber(body: LifeNumberBody, _: str = Depends(verify_api_token)):
     return success(await _calc("lifenumber", name="占问", birth_date=body.birth_date,
                                birth_time="0", gender="男"))
+
+
+@router.post("/lifenumber/period", summary="生命密码流年时运 (个人年/月/日)")
+async def calc_lifenumber_period(body: LifeNumberPeriodBody, _: str = Depends(verify_api_token)):
+    from app.engine.lifenumber_period import calculate_lifenumber_period
+    profile = {"birthday": body.birth_date}
+    return success(calculate_lifenumber_period(
+        profile=profile, expr=body.expr, base_date=body.base_date, granularity=body.granularity,
+    ))
 
 
 @router.post("/jiri/calc", summary="黄道吉日查询")

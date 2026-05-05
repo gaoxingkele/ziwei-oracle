@@ -41,6 +41,7 @@ from app.engine.calendar import resolve_calendar
 from app.engine.ziwei_period import calculate_ziwei_period
 from app.engine.bazi_period import calculate_bazi_period
 from app.engine.astrology_period import calculate_astrology_period
+from app.engine.lifenumber_period import calculate_lifenumber_period
 
 # ── 时间转换：24小时制 → 时辰序号 ──
 _SHICHEN_ORDER = "早子 丑 寅 卯 辰 巳 午 未 申 酉 戌 亥 晚子".split()
@@ -199,6 +200,7 @@ DS-Oracle 是一套东方命理计算工具集（15个工具），你是这套�
 - 八字主题 → 调 bazi_period(device_id, expr=<原文里的时间表达>)
 - 紫微主题 → 调 ziwei_period(device_id, expr=<原文里的时间表达>)
 - 占星主题 → 调 astrology_period(device_id, expr=<原文里的时间表达>)
+- 生命密码主题 (用户用过 lifenumber 起卦) → 调 lifenumber_period(device_id 或 birth_date, expr=...)
 
 调用一次工具就能拿到全部信息，不要先调 calendar_resolve 再调 *_period——后者已经内部集成了。
 
@@ -1043,6 +1045,46 @@ async def astrology_period(
     import json
     profile = await _load_user_profile(device_id)
     result = calculate_astrology_period(profile=profile, expr=expr, base_date=base_date, granularity=granularity)
+    return json.dumps(result, ensure_ascii=False, indent=2)
+
+
+@mcp.tool()
+async def lifenumber_period(
+    expr: str,
+    birth_date: str = "",
+    base_date: str = "",
+    granularity: str = "auto",
+    device_id: str = "",
+) -> str:
+    """生命密码流年时运 — 三层 (个人年/月/日) 数字命理时运分析。
+    调用策略: 优先用档案 (device_id), 也可显式传 birth_date。
+
+    LLM 解读铁律: 把"个人年 3 表达年"翻成白话 (如"今年是社交表达的好时候"),
+    禁止直接念数字+术语堆。voice 默认 100~180 字, 含主题词 + 1 句宜 + 1 句忌。
+
+    自动粒度选择 (granularity="auto"):
+      - 时间跨度 ≥ 60 天 → 给个人年
+      - 7~59 天 → 给个人年 + 个人月
+      - < 7 天 (包括"今天") → 给个人年 + 个人月 + 个人日
+
+    Args:
+        expr: 时间表达式, 如"今年"/"下个月"/"今天"/"2026年5月"
+        birth_date: 公历生日 YYYY-MM-DD, 不传则从档案读
+        base_date: 基准日期 YYYY-MM-DD, 留空为今天
+        granularity: auto (默认) / year / month / day, 显式指定时强制按该粒度算
+        device_id: 设备标识, 用于读档案
+    """
+    import json
+    if birth_date:
+        profile = {"birthday": birth_date, "device_id": device_id}
+    else:
+        profile = await _load_user_profile(device_id)
+        # 兼容档案字段名差异
+        if "birth_date" in profile and "birthday" not in profile:
+            profile["birthday"] = profile["birth_date"]
+    result = calculate_lifenumber_period(
+        profile=profile, expr=expr, base_date=base_date, granularity=granularity,
+    )
     return json.dumps(result, ensure_ascii=False, indent=2)
 
 

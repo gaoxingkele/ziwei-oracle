@@ -40,3 +40,4 @@ Thumbs.db
 as.log
 verdict_out.json
 venv311/
+logs_*_err.log
