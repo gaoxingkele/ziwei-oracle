@@ -29,7 +29,7 @@ for mod in [
     "app.engine.liuyao", "app.engine.astrology", "app.engine.qimen",
     "app.engine.liuren", "app.engine.iching", "app.engine.qianwen",
     "app.engine.jiemeng", "app.engine.name_analysis", "app.engine.hehun",
-    "app.engine.almanac", "app.engine.jiri",
+    "app.engine.almanac", "app.engine.jiri", "app.engine.lifenumber",
 ]:
     try:
         importlib.import_module(mod)
@@ -249,6 +249,7 @@ DS-Oracle 是一套东方命理计算工具集（15个工具），你是这套�
 - 合婚/配不配/合适吗/般配（涉及两人）→ hehun
 - 黄历/今天宜忌/冲什么 → almanac
 - 哪天适合/好日子/吉日/择日 → jiri
+- 生命密码/生命数字/数字密码/数字命理/灵数/我的命运数字 → lifenumber
 
 ### 模糊场景处理
 - "看看我的命运/运势" → 反问："您想看紫微斗数（侧重命盘格局）还是八字（侧重五行大运）？或者两个都排？"
@@ -881,6 +882,33 @@ async def hehun(
             "spouse_birth_time": _parse_time(birth_time_b),
             "spouse_gender": gender_b,
         },
+    )
+
+
+@mcp.tool()
+async def lifenumber(
+    birth_date: str,
+) -> str:
+    """生命密码 (中文流派) — 根据公历生日算出三个核心数字，给出性格与天赋解读。
+
+    用法关键词："生命密码"、"生命数字"、"数字密码"、"灵数"、"数字命理"、"我的命运数字"。
+    优势：仅需公历生日，无需出生时辰/姓名/地点；适合语音设备一句话占测。
+
+    返回三个数字的含义：
+    - 生命数 (life_number)：年月日全加到一位 (11/22/33 大师数不还原)，此生主轴特质
+    - 天赋数 (talent_number)：年月日全加得到的二位数中间结果，潜在才华
+    - 生日数 (birthday_number)：出生日数字相加，外显个性
+
+    LLM 解读铁律：必须把 1-9 / 11/22/33 各数字翻成白话讲, 不要直接念
+    "生命数 9 理想者博爱者"这种术语堆。voice 默认 100~200 字, 用户说"详细点"
+    才切到 pro 风格保留全部三数及其阴影面。
+
+    Args:
+        birth_date: 公历生日 YYYY-MM-DD，必填
+    """
+    return await _call_engine(
+        "lifenumber", name="占问", birth_date=birth_date,
+        birth_time="0", gender="男",
     )
 
 

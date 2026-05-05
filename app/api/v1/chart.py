@@ -105,6 +105,10 @@ class AlmanacBody(BaseModel):
     date: str = Field(default="", description="日期 YYYY-MM-DD，留空为今天")
 
 
+class LifeNumberBody(BaseModel):
+    birth_date: str = Field(description="公历生日 YYYY-MM-DD")
+
+
 async def _calc(system: str, **kwargs) -> dict:
     req = ChartRequest(system=system, **kwargs)
     result = await engine_calculate(req)
@@ -241,6 +245,12 @@ async def calc_hehun(body: HehunBody, _: str = Depends(verify_api_token)):
 @router.post("/almanac/calc", summary="黄历查询")
 async def calc_almanac(body: AlmanacBody, _: str = Depends(verify_api_token)):
     return success(await _calc("almanac", name="查询", birth_date=body.date or _today(),
+                               birth_time="0", gender="男"))
+
+
+@router.post("/lifenumber/calc", summary="生命密码 (中文流派)")
+async def calc_lifenumber(body: LifeNumberBody, _: str = Depends(verify_api_token)):
+    return success(await _calc("lifenumber", name="占问", birth_date=body.birth_date,
                                birth_time="0", gender="男"))
 
 

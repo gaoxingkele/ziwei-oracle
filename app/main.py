@@ -114,7 +114,7 @@ for _mod in [
     "app.engine.astrology", "app.engine.bazi", "app.engine.qimen",
     "app.engine.liuren", "app.engine.iching", "app.engine.qianwen",
     "app.engine.jiemeng", "app.engine.name_analysis", "app.engine.hehun",
-    "app.engine.jiri",
+    "app.engine.almanac", "app.engine.jiri", "app.engine.lifenumber",
 ]:
     try:
         importlib.import_module(_mod)
