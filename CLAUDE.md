@@ -38,10 +38,23 @@
 - 2026-04-25: 新增 calendar_resolve + 3 个 period 工具，作为时段类提问的标准前置/批量出口。
 
 ## 端口约定（已编排，互不冲突）
-- DS-Oracle FastAPI: **8812**（设定接口 + 命理 REST）
-- DS-Oracle MCP Server: **8811**（LLM 调用入口）
-- 小智 xiaozhi-server: 8765 ws + 8003 http（已避让，永久写入其 .config.yaml）
-- ngrok: 把 :8811 转发到公网
+
+**所有相关服务一律从本项目 `D:\aicoding\ds-oracle-cli\` 内启动。** xiaozhi-server 等第三方代码已通过 `vendor/` 目录就地查阅/编辑/启动。
+
+| 服务 | 端口 | 代码目录 | 启动 |
+|---|---:|---|---|
+| DS-Oracle FastAPI（设定 + 命理 REST）| **8812** | `app/` | `python -m uvicorn app.main:app --host 0.0.0.0 --port 8812` |
+| DS-Oracle MCP Server（LLM 工具调用）| **8811** | `mcp_server.py` | `python mcp_server.py --port 8811` |
+| xiaozhi-server（小智 ws/http）| **8765** ws + **8003** http | `vendor/xiaozhi-esp32-server/main/xiaozhi-server/` | 用原 .venv: `D:\aicoding\xiaozhi-esp32-server\main\xiaozhi-server\.venv\Scripts\python.exe app.py`（cwd 切到 vendor 路径）|
+| manager-api（Java Spring 管理 API）| **8002** | `vendor/xiaozhi-esp32-server/main/manager-api/` | `mvn spring-boot:run` |
+| manager-web（Vue 管理前端）| **8001** | `vendor/xiaozhi-esp32-server/main/manager-web/` | `npm install && npm run serve` |
+| ngrok 公网隧道 | admin **4040** | 项目根 `ngrok.exe` | `.\ngrok.exe http 8811` |
+
+**vendor/ 注意事项**：
+- `vendor/xiaozhi-esp32-server/` 是 xiaozhi-server 全部源码副本（约 1.97 GB，含 models/data/test 等运行时所需）
+- 排除了 `.venv/`（2.7 GB，启动时引用原路径 `D:\aicoding\xiaozhi-esp32-server\main\xiaozhi-server\.venv\`）和 `node_modules/` `.git/`
+- vendor/ 已加 .gitignore，**不入** ds-oracle 主项目 git 历史
+- `vendor/.../data/.config.yaml` 含 API key，屏幕分享/分发压缩包时需剔除
 
 ## 已知问题 / 坑
 - LLM 容易直接引用 calendar_resolve.ganzhi_year_solar 当流年，必须确保它和 by_period.ganzhi_month 算法一致（已修）。
