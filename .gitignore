@@ -41,3 +41,21 @@ as.log
 verdict_out.json
 venv311/
 logs_*_err.log
+
+# 第三方源码副本 vendor/xiaozhi-esp32-server (作为源码维护入 git)
+# 仅排除 .venv 和 models (重建/下载即可)
+vendor/xiaozhi-esp32-server/main/xiaozhi-server/.venv/
+vendor/xiaozhi-esp32-server/main/xiaozhi-server/models/
+# 含敏感凭据的文件 (强制排除, 防止 push 泄密)
+vendor/**/.config.yaml
+vendor/**/.secrets.yaml
+vendor/**/.private_config.yaml
+vendor/**/.env
+vendor/**/.env.development
+# 例外: manager-mobile 的 env 是公共构建配置, 不含密钥, 保留入 git (上游也保留)
+!vendor/xiaozhi-esp32-server/main/manager-mobile/**/env/
+!vendor/xiaozhi-esp32-server/main/manager-mobile/**/.env*
+# 标准构建产物 (不是源码)
+vendor/**/__pycache__/
+vendor/**/node_modules/
+vendor/**/*.pyc
