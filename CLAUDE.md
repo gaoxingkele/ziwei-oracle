@@ -45,14 +45,15 @@
 |---|---:|---|---|
 | DS-Oracle FastAPI（设定 + 命理 REST）| **8812** | `app/` | `python -m uvicorn app.main:app --host 0.0.0.0 --port 8812` |
 | DS-Oracle MCP Server（LLM 工具调用）| **8811** | `mcp_server.py` | `python mcp_server.py --port 8811` |
-| xiaozhi-server（小智 ws/http）| **8765** ws + **8003** http | `vendor/xiaozhi-esp32-server/main/xiaozhi-server/` | 用原 .venv: `D:\aicoding\xiaozhi-esp32-server\main\xiaozhi-server\.venv\Scripts\python.exe app.py`（cwd 切到 vendor 路径）|
+| xiaozhi-server（小智 ws/http）| **8765** ws + **8003** http | `vendor/xiaozhi-esp32-server/main/xiaozhi-server/` | `vendor\xiaozhi-esp32-server\main\xiaozhi-server\.venv\Scripts\python.exe app.py`（cwd 切到 vendor 路径）|
 | manager-api（Java Spring 管理 API）| **8002** | `vendor/xiaozhi-esp32-server/main/manager-api/` | `mvn spring-boot:run` |
 | manager-web（Vue 管理前端）| **8001** | `vendor/xiaozhi-esp32-server/main/manager-web/` | `npm install && npm run serve` |
 | ngrok 公网隧道 | admin **4040** | 项目根 `ngrok.exe` | `.\ngrok.exe http 8811` |
 
 **vendor/ 注意事项**：
-- `vendor/xiaozhi-esp32-server/` 是 xiaozhi-server 全部源码副本（约 1.97 GB，含 models/data/test 等运行时所需）
-- 排除了 `.venv/`（2.7 GB，启动时引用原路径 `D:\aicoding\xiaozhi-esp32-server\main\xiaozhi-server\.venv\`）和 `node_modules/` `.git/`
+- `vendor/xiaozhi-esp32-server/` 是 xiaozhi-server **完整自包含副本**（约 4.6 GB，含 models/data/test/.venv）
+- 排除的只有 `node_modules/` 和 `.git/`（npm/git 可重建，不必要重复）
+- xiaozhi-server 启动**完全不依赖原路径** `D:\aicoding\xiaozhi-esp32-server\`，所有依赖（含 .venv 的 opus.dll）已自包含在 vendor 内
 - vendor/ 已加 .gitignore，**不入** ds-oracle 主项目 git 历史
 - `vendor/.../data/.config.yaml` 含 API key，屏幕分享/分发压缩包时需剔除
 
