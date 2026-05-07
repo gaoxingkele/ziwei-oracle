@@ -238,6 +238,21 @@ DS-Oracle 是一套东方命理计算工具集（15个工具），你是这套�
   - 没爻码 → 调 liuyao_qigua 自动摇卦
   - 旧 liuyao 仅在用户明确要求"完整卦盘排版/装地支/六亲六神世应"时才用；常规断卦一律 liuyao_verdict
 - **设备 addon 强约束最高优先级**：用户消息后若附带 [设备附加 - 六爻起卦数据] 段，必须照 addon 末行的"请调用：xxx(...)"完整调用，禁止改工具名、禁止改参数、禁止走 meihua
+
+## device_id 铁律 (避免 LLM 编造导致档案查不到)
+
+凡涉及 device_id 参数:
+- **必须**用 addon 里给的真实 MAC 字符串(如 "3c:dc:75:61:f5:20"), 一字不改
+- **禁止**编造 "mcp_user_id"/"mcp_anonymous"/"123456789"/"anonymous"等任何示例值
+- **禁止**留空让服务端兜底 — 必传
+- 如果 addon 没给 device_id 也没给完整出生信息, 应当向用户索要
+
+## 多次工具调用结果调和
+
+当同一工具被调用多次 (如先编错 device_id 失败, 后用真值成功):
+- **忽略所有 isError=True 或返回"档案不完整"的失败结果**
+- 只用最后一次成功调用的 text_summary 做翻译, 不要把"很抱歉档案不完整"这种错误信息念给用户
+- 如果所有调用都失败, 才告诉用户档案问题; 但要用人话: "您的生日时辰还没保存到我这里"
 - 奇门/遁甲/八门九星 → qimen
 - 六壬/四课三传 → liuren
 - 周易/大衍/筮法 → iching
@@ -392,7 +407,7 @@ async def get_user_profile(device_id: str = "") -> str:
     需保证与调用本工具时传入的 device_id 一致。
 
     Args:
-        device_id: 设备/用户标识；留空则使用服务端环境变量 MCP_USER_ID，再无则 mcp_anonymous
+        device_id: 设备/用户标识。**必须**用 system addon 提供的真实值(MAC 格式如 "3c:dc:75:61:f5:20")。禁止编造 "mcp_user_id"/"anonymous"/示例字符串，禁止留空
     """
     profile = await _load_user_profile(device_id)
     missing = _missing_profile_fields(profile)
@@ -432,7 +447,7 @@ async def ziwei(
         birth_time: 出生时间，支持 24h/中文/时辰名（留空使用档案）
         gender: 性别，男 或 女（留空使用档案）
         city: 出生地（留空使用档案；ziwei 本身不依赖城市但用于校验档案完整性）
-        device_id: 设备标识；留空则用服务端 MCP_USER_ID
+        device_id: 设备标识。**必须**用 system addon 提供的真实 MAC 风格字符串(如 "3c:dc:75:61:f5:20")。**禁止**编造任何字符串(如 "mcp_user_id"/"anonymous"/"123456"等)，**禁止**留空让服务端兜底
     """
     name, birth_date, birth_time, gender, _city = await _resolve_birth_args(
         name, birth_date, birth_time, gender, device_id=device_id, city=city,
@@ -462,7 +477,7 @@ async def bazi(
         birth_time: 出生时间（留空使用档案）
         gender: 性别，男 或 女（留空使用档案）
         city: 出生地（留空使用档案；bazi 本身不依赖城市但用于校验档案完整性）
-        device_id: 设备标识；留空则用服务端 MCP_USER_ID
+        device_id: 设备标识。**必须**用 system addon 提供的真实 MAC 风格字符串(如 "3c:dc:75:61:f5:20")。**禁止**编造任何字符串(如 "mcp_user_id"/"anonymous"/"123456"等)，**禁止**留空让服务端兜底
     """
     name, birth_date, birth_time, gender, _city = await _resolve_birth_args(
         name, birth_date, birth_time, gender, device_id=device_id, city=city,
@@ -673,7 +688,7 @@ async def astrology(
         birth_time: 出生时间（留空使用档案）
         gender: 性别，男 或 女（留空使用档案）
         city: 出生地（留空使用档案中的 city）
-        device_id: 设备标识；留空则用服务端 MCP_USER_ID
+        device_id: 设备标识。**必须**用 system addon 提供的真实 MAC 风格字符串(如 "3c:dc:75:61:f5:20")。**禁止**编造任何字符串(如 "mcp_user_id"/"anonymous"/"123456"等)，**禁止**留空让服务端兜底
     """
     name, birth_date, birth_time, gender, city = await _resolve_birth_args(
         name, birth_date, birth_time, gender, device_id=device_id, city=city,
@@ -996,7 +1011,7 @@ async def ziwei_period(
         expr: 时间表达式，如"今年"、"明年上半年"、"2025年3月"
         base_date: 基准日期 YYYY-MM-DD，留空为今天
         granularity: 切分粒度，month（默认）或 year
-        device_id: 设备标识；留空则用服务端 MCP_USER_ID
+        device_id: 设备标识。**必须**用 system addon 提供的真实 MAC 风格字符串(如 "3c:dc:75:61:f5:20")。**禁止**编造任何字符串(如 "mcp_user_id"/"anonymous"/"123456"等)，**禁止**留空让服务端兜底
     """
     import json
     profile = await _load_user_profile(device_id)
@@ -1018,7 +1033,7 @@ async def bazi_period(
         expr: 时间表达式，如"今年"、"明年上半年"、"2025年3月"
         base_date: 基准日期 YYYY-MM-DD，留空为今天
         granularity: 切分粒度，month（默认）或 year
-        device_id: 设备标识；留空则用服务端 MCP_USER_ID
+        device_id: 设备标识。**必须**用 system addon 提供的真实 MAC 风格字符串(如 "3c:dc:75:61:f5:20")。**禁止**编造任何字符串(如 "mcp_user_id"/"anonymous"/"123456"等)，**禁止**留空让服务端兜底
     """
     import json
     profile = await _load_user_profile(device_id)
@@ -1040,7 +1055,7 @@ async def astrology_period(
         expr: 时间表达式，如"今年"、"明年上半年"、"2025年3月"
         base_date: 基准日期 YYYY-MM-DD，留空为今天
         granularity: 切分粒度，month（默认）或 year
-        device_id: 设备标识；留空则用服务端 MCP_USER_ID
+        device_id: 设备标识。**必须**用 system addon 提供的真实 MAC 风格字符串(如 "3c:dc:75:61:f5:20")。**禁止**编造任何字符串(如 "mcp_user_id"/"anonymous"/"123456"等)，**禁止**留空让服务端兜底
     """
     import json
     profile = await _load_user_profile(device_id)
