@@ -1,0 +1,13 @@
+--- /tmp/xiaozhi-new/main/xiaozhi-server/core/providers/tools/server_mcp/mcp_manager.py	2026-05-08 16:40:37.000000000 +0800
++++ /d/aicoding/xiaozhi-esp32-server/main/xiaozhi-server/core/providers/tools/server_mcp/mcp_manager.py	2026-04-25 00:47:01.403237400 +0800
+@@ -53,8 +53,8 @@
+             # 初始化服务端MCP客户端
+             logger.bind(tag=TAG).info(f"初始化服务端MCP客户端: {name}")
+             client = ServerMCPClient(srv_config)
+-            # 设置超时时间10秒
+-            await asyncio.wait_for(client.initialize(logging_callback=self.logging_callback), timeout=10)
++            # 初始化超时：走 ngrok/公网时 10s 常不够（握手+list_tools 易超），放宽到 60s
++            await asyncio.wait_for(client.initialize(logging_callback=self.logging_callback), timeout=60)
+ 
+             # 使用锁保护共享状态的修改
+             async with self._init_lock:

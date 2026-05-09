@@ -1,0 +1,7 @@
+--- /tmp/xiaozhi-new/main/xiaozhi-server/core/handle/textMessageType.py	2026-05-08 16:40:37.000000000 +0800
++++ /d/aicoding/xiaozhi-esp32-server/main/xiaozhi-server/core/handle/textMessageType.py	2026-04-19 23:21:20.043788900 +0800
+@@ -10,3 +10,4 @@
+     MCP = "mcp"
+     SERVER = "server"
+     PING = "ping"
++    SYSTEM = "system"

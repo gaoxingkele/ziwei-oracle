@@ -426,7 +426,7 @@ export default {
 }
 
 .session-info {
-    flex: 1;
+    width: calc(100% - 50px);
 }
 
 .session-time {

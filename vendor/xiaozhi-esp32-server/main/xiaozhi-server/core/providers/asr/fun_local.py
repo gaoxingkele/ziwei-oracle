@@ -6,7 +6,6 @@ import shutil
 import psutil
 import asyncio
 
-import numpy as np
 from funasr import AutoModel
 from config.logger import setup_logging
 from typing import Optional, Tuple, List
@@ -77,57 +76,17 @@ class ASRProvider(ASRProviderBase):
 
                 # 语音识别 - 使用线程池避免阻塞事件循环
                 start_time = time.time()
-                pcm_int16 = np.frombuffer(artifacts.pcm_bytes, dtype=np.int16)
-
-                # 写成临时 WAV 让 FunASR 从文件读取（numpy 直传有版本兼容问题）
-                import wave
-                import tempfile
-                _tmp_dir = self.output_dir or tempfile.gettempdir()
-                os.makedirs(_tmp_dir, exist_ok=True)
-                _wav_path = os.path.join(_tmp_dir, f"asr_{session_id[:8]}_{int(time.time()*1000)}.wav")
-                try:
-                    with wave.open(_wav_path, "wb") as w:
-                        w.setnchannels(1)
-                        w.setsampwidth(2)
-                        w.setframerate(16000)
-                        w.writeframes(artifacts.pcm_bytes)
-                    _rms = float(np.sqrt(np.mean((pcm_int16.astype(np.float32)/32768.0) ** 2))) if pcm_int16.size else 0.0
-                    _peak = float(np.max(np.abs(pcm_int16))/32768.0) if pcm_int16.size else 0.0
-                    logger.bind(tag=TAG).info(
-                        f"[PCM 诊断] samples={pcm_int16.size} duration={pcm_int16.size/16000:.2f}s "
-                        f"rms={_rms:.4f} peak={_peak:.4f} wav={_wav_path}"
-                    )
-                except Exception as _e:
-                    logger.bind(tag=TAG).warning(f"[PCM 诊断] 写 WAV 失败: {_e}")
-
                 result = await asyncio.to_thread(
                     self.model.generate,
-                    input=_wav_path,
+                    input=artifacts.pcm_bytes,
                     cache={},
                     language="auto",
                     use_itn=True,
                     batch_size_s=60,
                 )
-                # 兼容 FunASR 多版本返回结构：[{"text":"..."}] / ["..."] / "..."
-                raw_text = ""
-                if isinstance(result, str):
-                    raw_text = result
-                elif isinstance(result, (list, tuple)) and result:
-                    first = result[0]
-                    if isinstance(first, dict):
-                        raw_text = first.get("text", "") or first.get("content", "")
-                    elif isinstance(first, str):
-                        raw_text = first
-                    else:
-                        raw_text = str(first)
-                if not raw_text:
-                    logger.bind(tag=TAG).warning(
-                        f"ASR 返回空，原始结构 type={type(result).__name__} sample={str(result)[:200]}"
-                    )
-                text = lang_tag_filter(raw_text)
-                _content = text["content"] if isinstance(text, dict) else text
-                logger.bind(tag=TAG).info(
-                    f"语音识别耗时: {time.time() - start_time:.3f}s | 结果: {_content}"
+                text = lang_tag_filter(result[0]["text"])
+                logger.bind(tag=TAG).debug(
+                    f"语音识别耗时: {time.time() - start_time:.3f}s | 结果: {text['content']}"
                 )
 
                 return text, artifacts.file_path

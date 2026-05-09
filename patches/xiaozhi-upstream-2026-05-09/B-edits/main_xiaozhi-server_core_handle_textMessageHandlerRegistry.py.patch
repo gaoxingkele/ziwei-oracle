@@ -1,0 +1,18 @@
+--- /tmp/xiaozhi-new/main/xiaozhi-server/core/handle/textMessageHandlerRegistry.py	2026-05-08 16:40:37.000000000 +0800
++++ /d/aicoding/xiaozhi-esp32-server/main/xiaozhi-server/core/handle/textMessageHandlerRegistry.py	2026-04-19 23:21:48.151463600 +0800
+@@ -8,6 +8,7 @@
+ from core.handle.textMessageHandler import TextMessageHandler
+ from core.handle.textHandler.serverMessageHandler import ServerTextMessageHandler
+ from core.handle.textHandler.pingMessageHandler import PingMessageHandler
++from core.handle.textHandler.systemMessageHandler import SystemTextMessageHandler
+ 
+ TAG = __name__
+ 
+@@ -29,6 +30,7 @@
+             McpTextMessageHandler(),
+             ServerTextMessageHandler(),
+             PingMessageHandler(),
++            SystemTextMessageHandler(),
+         ]
+ 
+         for handler in handlers:

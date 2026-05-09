@@ -1,0 +1,143 @@
+--- /d/aicoding/ds-oracle-cli/patches/xiaozhi-upstream-2026-05-09/B-snapshots/main_xiaozhi-server_core_handle_receiveAudioHandle.py.UPSTREAM	2026-05-09 13:45:30.469643700 +0800
++++ /d/aicoding/ds-oracle-cli/patches/xiaozhi-upstream-2026-05-09/B-snapshots/main_xiaozhi-server_core_handle_receiveAudioHandle.py.LOCAL	2026-05-09 19:39:37.600029100 +0800
+@@ -1,7 +1,8 @@
+ import time
+ import json
++import re
+ import asyncio
+-from typing import TYPE_CHECKING
++from typing import TYPE_CHECKING, Optional
+ 
+ if TYPE_CHECKING:
+     from core.connection import ConnectionHandler
+@@ -14,7 +15,93 @@
+ TAG = __name__
+ 
+ 
++# Mazu device 首轮 server-side augment.
++# 客户端进入命理/卦法 Dialog 时通过 type:"system" 消息注入话题 + 档案/卦象 + 设备ID。
++# 用户首次语音 ASR 完成后，把语音文本拼到结构化模板里，让 LLM 第一次 chat 就拿到
++# 完整的工具调用形态，避免:
++#   - LLM 漏 device_id (默认 user123) 导致 profile-based 工具失败
++#   - LLM 把 question="<用户语音原话填入此处>" 字面量原样传给 MCP
++#   - client 端 abort+resubmit 触发的双 chat race
++# 后续轮次 (dialogue 里已有 user 消息) 不再 augment，依赖 LLM 短时记忆。
++#
++# 处理 2 类:
++#   1) profile-based: 八字/紫微/西方占星 — 从 addon 抽用户档案 + 设备ID
++#   2) hexagram:      六爻起卦/梅花易数 — 从 addon 抽设备已起好的卦码字面量
++# 不处理: 解梦 (LLM 抽关键词, 不是替换), 求签 (无参工具调用, 无 placeholder)
++_PROFILE_TOPIC_MAP = [
++    ("【当前话题: 八字",     "八字命理", "bazi"),
++    ("【当前话题: 紫微",     "紫微斗数", "ziwei"),
++    ("【当前话题: 西方占星", "西方占星", "astrology"),
++]
++
++
++def _augment_profile(addon: str, voice_text: str) -> Optional[str]:
++    topic_name = tool = None
++    for marker, name, t in _PROFILE_TOPIC_MAP:
++        if marker in addon:
++            topic_name, tool = name, t
++            break
++    if not tool:
++        return None
++    prof = re.search(r"用户档案[^:]*?:\s*([^\n]+)", addon)
++    dev  = re.search(r"设备ID:\s*([^\n]+)", addon)
++    if not prof or not dev:
++        return None
++    return (
++        f"[查询]\n"
++        f"话题: {topic_name}\n"
++        f"档案: {prof.group(1).strip()}\n"
++        f"设备ID: {dev.group(1).strip()}\n"
++        f"用户问题: {voice_text}\n"
++        f"请调用 {tool}() 工具回答 (使用上方 device_id 或直接传 birth_date 等参数)"
++    )
++
++
++def _augment_hexagram(addon: str, voice_text: str) -> Optional[str]:
++    safe_q = voice_text.replace('"', '\\"')
++    if "【当前话题: 六爻起卦】" in addon:
++        m = re.search(r"六爻码\s*=\s*\[\s*([\d,\s]+)\s*\]", addon)
++        if not m:
++            return None
++        codes = re.sub(r"\s+", "", m.group(1))
++        return (
++            f"[查询]\n"
++            f"话题: 六爻起卦\n"
++            f"卦象: 六爻码=[{codes}] (1=少阳静 2=少阴静 3=老阳动 4=老阴动, 自下而上)\n"
++            f"用户问题: {voice_text}\n"
++            f"请调用: liuyao_verdict(yao_codes=[{codes}], question=\"{safe_q}\")"
++        )
++    if "【当前话题: 梅花易数】" in addon:
++        m = re.search(r"上卦/下卦/动爻\s*=\s*\[\s*([\d,\s]+)\s*\]", addon)
++        if not m:
++            return None
++        nums = re.sub(r"\s+", "", m.group(1))
++        return (
++            f"[查询]\n"
++            f"话题: 梅花易数\n"
++            f"卦象: 上卦/下卦/动爻=[{nums}]\n"
++            f"用户问题: {voice_text}\n"
++            f"请调用: meihua(numbers=[{nums}], question=\"{safe_q}\")"
++        )
++    return None
++
++
++def _build_augmented_query(conn: "ConnectionHandler", voice_text: str) -> Optional[str]:
++    addon = getattr(conn, "_system_prompt_addon", "") or ""
++    if not addon:
++        return None
++    # 仅首轮 (dialogue 里没有 user 消息时)
++    try:
++        if any(m.role == "user" for m in conn.dialogue.dialogue):
++            return None
++    except Exception:
++        return None
++    return _augment_profile(addon, voice_text) or _augment_hexagram(addon, voice_text)
++
++
+ async def handleAudioMessage(conn: "ConnectionHandler", audio):
++    if conn.is_exiting:
++        return
+     # 当前片段是否有人说话
+     have_voice = conn.vad.is_vad(conn, audio)
+     # 如果设备刚刚被唤醒，短暂忽略VAD检测
+@@ -80,20 +167,33 @@
+     if conn.client_is_speaking and conn.client_listen_mode != "manual":
+         await handleAbortMessage(conn)
+ 
+-    # 首先进行意图分析，使用实际文本内容
++    # Mazu 命理类首轮 server-side augment: 拼 voice + profile + 工具规范作为
++    # LLM 输入。但 client 端的 stt 回显 + intent 检测仍用原始 voice_text, 保证
++    # 用户气泡 / 意图判定都基于用户实际说的话。
++    chat_text = actual_text
++    augmented = _build_augmented_query(conn, actual_text)
++    if augmented:
++        chat_text = augmented
++        conn.logger.bind(tag=TAG).info(
++            f"server augment 命理首轮: voice={actual_text} -> chat with structured prompt"
++        )
++
++    # 首先进行意图分析，使用实际文本内容（用户原话）
+     intent_handled = await handle_user_intent(conn, actual_text)
+ 
+     if intent_handled:
+         # 如果意图已被处理，不再进行聊天
+         return
+ 
+-    # 意图未被处理，继续常规聊天流程，使用实际文本内容
++    # 意图未被处理，继续常规聊天流程
++    # stt 推给 client 用原话, 客户端气泡显示用户实际说了什么
+     await send_stt_message(conn, actual_text)
+ 
+     # 准备开始新会话
+     conn.client_abort = False
+ 
+-    conn.executor.submit(conn.chat, actual_text)
++    # 真正喂给 LLM 的是 augmented (命理类首轮) 或原话 (其他)
++    conn.executor.submit(conn.chat, chat_text)
+ 
+ 
+ async def no_voice_close_connect(conn: "ConnectionHandler", have_voice):

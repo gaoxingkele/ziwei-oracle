@@ -1,0 +1,21 @@
+--- /tmp/xiaozhi-new/main/xiaozhi-server/core/handle/intentHandler.py	2026-05-08 16:40:37.000000000 +0800
++++ /d/aicoding/xiaozhi-esp32-server/main/xiaozhi-server/core/handle/intentHandler.py	2026-04-17 16:52:02.000000000 +0800
+@@ -33,6 +33,10 @@
+     if await check_direct_exit(conn, filtered_text):
+         return True
+ 
++    # 明确再见不被打断
++    if conn.is_exiting:
++        return True
++
+     # 检查是否是唤醒词
+     if await checkWakeupWords(conn, filtered_text):
+         return True
+@@ -58,6 +62,7 @@
+         if text == cmd:
+             conn.logger.bind(tag=TAG).info(f"识别到明确的退出命令: {text}")
+             await send_stt_message(conn, text)
++            conn.is_exiting = True
+             await conn.close()
+             return True
+     return False
