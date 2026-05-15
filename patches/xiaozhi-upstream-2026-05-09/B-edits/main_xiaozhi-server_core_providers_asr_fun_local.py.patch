@@ -1,0 +1,17 @@
+--- /d/aicoding/ds-oracle-cli/patches/xiaozhi-upstream-2026-05-09/B-snapshots/main_xiaozhi-server_core_providers_asr_fun_local.py.UPSTREAM	2026-05-11 22:00:39.623584500 +0800
++++ /d/aicoding/ds-oracle-cli/patches/xiaozhi-upstream-2026-05-09/B-snapshots/main_xiaozhi-server_core_providers_asr_fun_local.py.LOCAL	2026-05-11 22:00:39.652017300 +0800
+@@ -84,9 +84,12 @@
+                     use_itn=True,
+                     batch_size_s=60,
+                 )
+-                text = lang_tag_filter(result[0]["text"])
++                # lang_tag_filter 在 FunASR 输出无 <|...|> 标签时返回 str (短音频/噪音),
++                # 有标签时返回 dict。caller 期望 str, 这里统一抽出 content。
++                parsed = lang_tag_filter(result[0]["text"])
++                text = parsed["content"] if isinstance(parsed, dict) else parsed
+                 logger.bind(tag=TAG).debug(
+-                    f"语音识别耗时: {time.time() - start_time:.3f}s | 结果: {text['content']}"
++                    f"语音识别耗时: {time.time() - start_time:.3f}s | 结果: {text}"
+                 )
+ 
+                 return text, artifacts.file_path

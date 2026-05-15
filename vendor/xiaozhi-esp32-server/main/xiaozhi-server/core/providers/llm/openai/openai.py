@@ -10,11 +10,15 @@ TAG = __name__
 logger = setup_logging()
 
 # 需要禁用思考模式的平台域名及其对应参数（默认关闭思考模式）
+# 关闭原因: 多轮 function_call 时, 如果模型返回 reasoning_content 而下一轮 dialogue
+# 没把它原样回传, DeepSeek/智谱/火山等会 400 "reasoning_content must be passed back".
+# xiaozhi-server 当前的 dialogue 缓存不保留 reasoning_content, 所以一律关思考最稳。
 THINKING_DISABLED_DOMAINS = {
     "aliyuncs.com": {"enable_thinking": False},
-    "bigmodel.cn": {"thinking": {"type": "disabled"}},
-    "moonshot.cn": {"thinking": {"type": "disabled"}},
-    "volces.com": {"thinking": {"type": "disabled"}},
+    "bigmodel.cn":  {"thinking": {"type": "disabled"}},
+    "moonshot.cn":  {"thinking": {"type": "disabled"}},
+    "volces.com":   {"thinking": {"type": "disabled"}},
+    "deepseek.com": {"thinking": {"type": "disabled"}},   # B14: 上游没加, 我们补
 }
 
 
@@ -136,6 +140,30 @@ class LLMProvider(LLMProviderBase):
 
     def response_with_functions(self, session_id, dialogue, functions=None, **kwargs):
         dialogue = self.normalize_dialogue(dialogue)
+
+        # 防御性 dedup: server_mcp + device_mcp + plugins 多源注册偶尔出现 function.name
+        # 撞名（OpenAI/DeepSeek 收到重名 tool 会 400 "Tool names must be unique"）。
+        # 按 function.name 去重，保留先出现的；同时打日志暴露重名工具方便定位上游 bug。
+        if functions:
+            seen = set()
+            uniq = []
+            dups = []
+            for f in functions:
+                if not isinstance(f, dict):
+                    uniq.append(f); continue
+                name = f.get("function", {}).get("name") or f.get("name")
+                if not name:
+                    uniq.append(f); continue
+                if name in seen:
+                    dups.append(name)
+                    continue
+                seen.add(name)
+                uniq.append(f)
+            if dups:
+                logger.bind(tag=TAG).warning(
+                    f"LLM tools 去重: 丢弃重名 {dups} (原 {len(functions)} → {len(uniq)})"
+                )
+            functions = uniq
 
         request_params = {
             "model": self.model_name,

@@ -84,12 +84,9 @@ class ASRProvider(ASRProviderBase):
                     use_itn=True,
                     batch_size_s=60,
                 )
-                # lang_tag_filter 在 FunASR 输出无 <|...|> 标签时返回 str (短音频/噪音),
-                # 有标签时返回 dict。caller 期望 str, 这里统一抽出 content。
-                parsed = lang_tag_filter(result[0]["text"])
-                text = parsed["content"] if isinstance(parsed, dict) else parsed
+                text = lang_tag_filter(result[0]["text"])
                 logger.bind(tag=TAG).debug(
-                    f"语音识别耗时: {time.time() - start_time:.3f}s | 结果: {text}"
+                    f"语音识别耗时: {time.time() - start_time:.3f}s | 结果: {text['content']}"
                 )
 
                 return text, artifacts.file_path

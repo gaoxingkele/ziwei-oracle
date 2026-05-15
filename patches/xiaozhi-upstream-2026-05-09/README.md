@@ -17,7 +17,7 @@ upstream 来源：https://github.com/xinnan-tech/xiaozhi-esp32-server （`main` 
 |---|---|
 | `core/handle/textHandler/systemMessageHandler.py` | 处理 `{"type":"system","text":"..."}` 运行时 prompt addon；同时缓存 addon 到 `conn._system_prompt_addon` 供 receiveAudioHandle 读取（mazu 命理首轮 augment 用） |
 
-## B. 对上游文件的本地修改（11 处）
+## B. 对上游文件的本地修改（12 处）
 
 ### 简单可机械重应用（upstream 该文件几乎未动 / 仅本地附加）
 - `textMessageType.py` — 添加 `SYSTEM = "system"` 枚举
@@ -27,6 +27,7 @@ upstream 来源：https://github.com/xinnan-tech/xiaozhi-esp32-server （`main` 
 - `intentHandler.py` — `is_exiting` 不被打断 + 告别后置位
 - `abortHandle.py` — `is_exiting` 早返回 + 去掉 `close_after_chat = False` 重置
 - `core/providers/asr/base.py` — `is_exiting` 时关闭连接
+- `core/providers/asr/fun_local.py` — **修上游 bug** (B12, 2026-05-11)：`lang_tag_filter` 在无标签短音频/噪音输入时返回 str（不是 dict），caller 一律按 dict 取 `["content"]` 触发 `string indices must be integers`。改成 `isinstance` 分流，并把 return 类型从 dict-or-str 收敛到 str（caller 类型注解就是 str）
 - `plugins_func/functions/handle_exit_intent.py` — 设 `is_exiting = True`，简化 close_after_chat 守卫
 - `core/providers/tools/server_mcp/mcp_manager.py` — MCP 初始化超时 10s → 60s（ngrok/公网必需）
 
