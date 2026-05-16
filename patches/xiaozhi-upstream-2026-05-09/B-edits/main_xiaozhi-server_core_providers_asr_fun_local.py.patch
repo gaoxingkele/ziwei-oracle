@@ -1,6 +1,21 @@
 --- /d/aicoding/ds-oracle-cli/patches/xiaozhi-upstream-2026-05-09/B-snapshots/main_xiaozhi-server_core_providers_asr_fun_local.py.UPSTREAM	2026-05-11 22:00:39.623584500 +0800
-+++ /d/aicoding/ds-oracle-cli/patches/xiaozhi-upstream-2026-05-09/B-snapshots/main_xiaozhi-server_core_providers_asr_fun_local.py.LOCAL	2026-05-11 22:00:39.652017300 +0800
-@@ -84,9 +84,12 @@
++++ /d/aicoding/ds-oracle-cli/patches/xiaozhi-upstream-2026-05-09/B-snapshots/main_xiaozhi-server_core_providers_asr_fun_local.py.LOCAL	2026-05-16 19:07:38.185937700 +0800
+@@ -50,6 +50,9 @@
+         self.interface_type = InterfaceType.LOCAL
+         self.model_dir = config.get("model_dir")
+         self.output_dir = config.get("output_dir")  # 修正配置键名
++        # 强制指定识别语言，避免 language="auto" 在短音频/中英混杂时误判
++        # 导致中文 ASR 返回乱码（FunASR 的 SenseVoice 默认对自动语种识别比较敏感）
++        self.language = config.get("language", "zh")
+         self.delete_audio_file = delete_audio_file
+ 
+         # 确保输出目录存在
+@@ -80,13 +83,16 @@
+                     self.model.generate,
+                     input=artifacts.pcm_bytes,
+                     cache={},
+-                    language="auto",
++                    language=self.language,
                      use_itn=True,
                      batch_size_s=60,
                  )

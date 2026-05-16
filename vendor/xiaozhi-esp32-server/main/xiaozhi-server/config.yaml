@@ -351,6 +351,9 @@ ASR:
     type: fun_local
     model_dir: models/SenseVoiceSmall
     output_dir: tmp/
+    # 强制指定识别语言，避免 "auto" 在短音频/中英混杂时识别失败导致中文乱码
+    # 可选: zh / en / ja / ko / yue / auto
+    language: zh
   FunASRServer:
     # 独立部署FunASR，使用FunASR的API服务，只需要五句话
     # 第一句：mkdir -p ./funasr-runtime-resources/models

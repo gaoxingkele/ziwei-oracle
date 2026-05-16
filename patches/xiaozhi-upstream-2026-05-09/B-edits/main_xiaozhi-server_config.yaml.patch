@@ -1,5 +1,14 @@
---- /tmp/xiaozhi-new/main/xiaozhi-server/config.yaml	2026-05-08 16:40:37.000000000 +0800
-+++ /d/aicoding/xiaozhi-esp32-server/main/xiaozhi-server/config.yaml	2026-04-25 08:10:38.019672700 +0800
+--- /d/aicoding/ds-oracle-cli/patches/xiaozhi-upstream-2026-05-09/B-snapshots/main_xiaozhi-server_config.yaml.UPSTREAM	2026-05-09 13:45:31.533188400 +0800
++++ /d/aicoding/ds-oracle-cli/patches/xiaozhi-upstream-2026-05-09/B-snapshots/main_xiaozhi-server_config.yaml.LOCAL	2026-05-16 19:07:38.224285900 +0800
+@@ -9,7 +9,7 @@
+ server:
+   # 服务器监听地址和端口(Server listening address and port)
+   ip: 0.0.0.0
+-  port: 8000
++  port: 8765
+   # http服务的端口，用于简单OTA接口(单服务部署)，以及视觉分析接口
+   http_port: 8003
+   # 这个websocket配置是指ota接口向设备发送的websocket地址
 @@ -201,6 +201,12 @@
    绝不：
    - 长篇大论，叽叽歪歪
@@ -13,121 +22,13 @@
  
  # 默认系统提示词模板文件
  prompt_template: agent-base-prompt.txt
-@@ -396,28 +402,7 @@
-     type: doubao_stream
-     appid: 你的火山引擎语音合成服务appid
-     access_token: 你的火山引擎语音合成服务access_token
--    # 资源ID：小时版 volc.bigasr.sauc.duration，并发版 volc.bigasr.sauc.concurrent
--    resource_id: volc.bigasr.sauc.duration
--    # 热词、替换词使用流程：https://www.volcengine.com/docs/6561/155738
--    boosting_table_name: （选填）你的热词文件名称
--    correct_table_name: （选填）你的替换词文件名称
--    # 是否开启多语种识别模式
--    enable_multilingual: False
--    # 多语种识别当该键为空时，该模型支持中英文、上海话、闽南语，四川、陕西、粤语识别。当将其设置为特定键时，它可以识别指定语言。
--    # 详细语言列表参考 https://www.volcengine.com/docs/6561/1354869
--    # language: zh-cn
--    # 静音判定时长(ms)，默认200ms
--    end_window_size: 200
--    output_dir: tmp/
--  DoubaoStreamASRV2:
--    # 豆包语音识别模型2.0（基于火山引擎seed-asr）
--    # 开通地址：https://console.volcengine.com/speech/service/10038
--    # 价格更为便宜，建议在高并发场景下使用
--    type: doubao_stream
--    appid: 你的火山引擎语音合成服务appid
--    access_token: 你的火山引擎语音合成服务access_token
--    # 资源ID：小时版 volc.seedasr.sauc.duration，并发版 volc.seedasr.sauc.concurrent
--    resource_id: volc.seedasr.sauc.duration
-+    cluster: volcengine_input_common
-     # 热词、替换词使用流程：https://www.volcengine.com/docs/6561/155738
-     boosting_table_name: （选填）你的热词文件名称
-     correct_table_name: （选填）你的替换词文件名称
-@@ -817,31 +802,6 @@
-     #     - source_speaker: zh_male_ahu_conversation_wvae_bigtts
-     #       mix_factor: 0.4
-     # language: "中文"  # 指定输出语种,如:中文、英语、日语、韩语等,请根据所选音色支持的语言进行设置,不填则默认为中文
--  #豆包语音合成模型2.0，支持双向流式tts（基于seed-tts-2.0资源）
--  HuoshanDoubleStreamTTSV2:
--    type: huoshan_double_stream
--    # 访问 https://console.volcengine.com/speech/service/10035 开通语音合成大模型，购买音色
--    # 在页面底部获取appid和access_token
--    # 资源ID固定为：seed-tts-2.0（豆包语音合成模型2.0）
--    # 如果是机智云，把接口地址换成wss://bytedance.gizwitsapi.com/api/v3/tts/bidirection
--    # 机智云不需要天填 appid
--    ws_url: wss://openspeech.bytedance.com/api/v3/tts/bidirection
--    appid: 你的火山引擎语音合成服务appid
--    access_token: 你的火山引擎语音合成服务access_token
--    resource_id: seed-tts-2.0
--    speaker: zh_female_xiaohe_uranus_bigtts
--    # 开启WebSocket连接复用，默认复用（注意：复用后设备处于聆听状态时空闲链接会占并发数）
--    enable_ws_reuse: True
--    # 相关参数文档：https://www.volcengine.com/docs/6561/1329505
--    # 音频输出配置（audio_params）- 用户可自定义添加火山引擎支持的任何音频参数
--    audio_params:
--      speech_rate: 0  # 语速(-50~100)
--      loudness_rate: 0  # 音量(-50~100)
--    # 高级文本处理配置（additions）- 用户可自定义添加火山引擎支持的任何高级参数
--    additions:
--      post_process:
--        pitch: 0  # 音高(-12~12)
--    # language: "中文"  # 指定输出语种,如:中文、英语、日语、韩语等,请根据所选音色支持的语言进行设置,不填则默认为中文
-   CosyVoiceSiliconflow:
-     type: siliconflow
-     # 硅基流动TTS
-@@ -1053,6 +1013,36 @@
+@@ -345,6 +351,9 @@
+     type: fun_local
+     model_dir: models/SenseVoiceSmall
      output_dir: tmp/
-     access_token: "你的302API密钥"
-     # language: "中文"  # 指定输出语种,如:中文、英语、日语、韩语等,请根据所选音色支持的语言进行设置,不填则默认为中文
-+  GizwitsTTS:
-+    type: doubao
-+    # 火山引擎作为基座，可以完全使用企业级火山引擎语音合成服务
-+    # 前一万名注册的用户，将送5元体验金额
-+    # 获取API Key地址：https://agentrouter.gizwitsapi.com/panel/token
-+    api_url: https://bytedance.gizwitsapi.com/api/v1/tts
-+    authorization: "Bearer "
-+    # 湾湾小何音色
-+    voice: "zh_female_wanwanxiaohe_moon_bigtts"
-+    output_dir: tmp/
-+    access_token: "你的机智云API key"
-+    # language: "中文"  # 指定输出语种,如:中文、英语、日语、韩语等,请根据所选音色支持的语言进行设置,不填则默认为中文
-+  ACGNTTS:
-+    #在线网址：https://acgn.ttson.cn/
-+    #token购买：www.ttson.cn
-+    #开发相关疑问请提交至网站上的qq
-+    #角色id获取地址：ctrl+f快速检索角色——网站管理者不允许发布,可询问网站管理者
-+    #各参数意义见开发文档：https://www.yuque.com/alexuh/skmti9/wm6taqislegb02gd?singleDoc#
-+    type: ttson
-+    token: your_token
-+    voice_id: 1695
-+    speed_factor: 1
-+    pitch_factor: 0
-+    volume_change_dB: 0
-+    to_lang: ZH
-+    url: https://u95167-bd74-2aef8085.westx.seetacloud.com:8443/flashsummary/tts?token=
-+    format: mp3
-+    output_dir: tmp/
-+    emotion: 1
-+    # language: "中文"  # 指定输出语种,如:中文、英语、日语、韩语等,请根据所选音色支持的语言进行设置,不填则默认为中文
-   OpenAITTS:
-     # openai官方文本转语音服务，可支持全球大多数语种
-     type: openai
-@@ -1092,6 +1082,18 @@
-     format: mp3 # 接口返回的音频格式
-     output_dir: tmp/
-     # language: "中文"  # 指定输出语种,如:中文、英语、日语、韩语等,请根据所选音色支持的语言进行设置,不填则默认为中文
-+  LinkeraiTTS:
-+    type: linkerai
-+    api_url: https://tts.linkerai.cn/tts
-+    audio_format: "pcm"
-+    # 默认的access_token供大家测试时免费使用的，此access_token请勿用于商业用途
-+    # 如果效果不错，可自行申请token，申请地址：https://linkerai.cn
-+    # 各参数意义见开发文档：https://tts.linkerai.cn/docs
-+    # 支持声音克隆，可自行上传音频，填入voice参数，voice参数为空时，使用默认声音
-+    access_token: "U4YdYXVfpwWnk2t5Gp822zWPCuORyeJL"
-+    voice: "OUeAo1mhq6IBExi"
-+    output_dir: tmp/
-+    # language: "中文"  # 指定输出语种,如:中文、英语、日语、韩语等,请根据所选音色支持的语言进行设置,不填则默认为中文
-   PaddleSpeechTTS:
-     #百度飞浆 PaddleSpeech 支持本地离线部署 支持模型训练
-     #框架地址 https://www.paddlepaddle.org.cn/
++    # 强制指定识别语言，避免 "auto" 在短音频/中英混杂时识别失败导致中文乱码
++    # 可选: zh / en / ja / ko / yue / auto
++    language: zh
+   FunASRServer:
+     # 独立部署FunASR，使用FunASR的API服务，只需要五句话
+     # 第一句：mkdir -p ./funasr-runtime-resources/models

@@ -50,6 +50,9 @@ class ASRProvider(ASRProviderBase):
         self.interface_type = InterfaceType.LOCAL
         self.model_dir = config.get("model_dir")
         self.output_dir = config.get("output_dir")  # 修正配置键名
+        # 强制指定识别语言，避免 language="auto" 在短音频/中英混杂时误判
+        # 导致中文 ASR 返回乱码（FunASR 的 SenseVoice 默认对自动语种识别比较敏感）
+        self.language = config.get("language", "zh")
         self.delete_audio_file = delete_audio_file
 
         # 确保输出目录存在
@@ -80,7 +83,7 @@ class ASRProvider(ASRProviderBase):
                     self.model.generate,
                     input=artifacts.pcm_bytes,
                     cache={},
-                    language="auto",
+                    language=self.language,
                     use_itn=True,
                     batch_size_s=60,
                 )
