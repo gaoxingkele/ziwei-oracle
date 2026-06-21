@@ -1,9 +1,10 @@
-kerykeion>=5.7.0
-kinqimen>=0.0.6
-kinliuren>=0.1.2
-ichingshifa>=3.1
+# ── 玄学算法库：pin 死已验证版本，防云端重装版本漂移导致排盘结果变化 ──
+kerykeion==5.12.8
+kinqimen==0.0.6.6
+kinliuren==0.1.2.9
+ichingshifa==3.1.9
 cn2an>=0.5
-najia
+najia==2.0.1
 openai>=1.0
 Pillow>=10.0
 python-dotenv>=1.0

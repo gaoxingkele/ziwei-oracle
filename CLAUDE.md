@@ -11,13 +11,13 @@
 # 项目工作记忆
 
 ## 项目背景
-- 目标: 中华术数综合平台 — 紫微/八字/占星/六壬/奇门/梅花/六爻/签文/解梦/合婚/起名/黄历/择日 一体化引擎
+- 目标: 中华术数综合平台 — 紫微/八字/占星/六壬/奇门/梅花/六爻/签文/解梦/合婚/起名/黄历/择日/生命灵数 一体化引擎
 - 技术栈: Python 3.10+, FastAPI, MCP SDK (FastMCP), SQLite/PostgreSQL, Kimi/OpenAI/Claude LLM
 - 关键约束: 引擎统一 `ChartRequest → ChartResult`，时间一律 `_parse_time()`，禁止 LLM 自行做命理算术
 
-## 当前进度（截至 2026-04-29）
+## 当前进度（截至 2026-06-21）
 - 已完成:
-  - 19 个原始 MCP 工具（15 命理 + 4 签文专用）
+  - 27 个 MCP 工具（16 命理含 lifenumber + 1 算法断卦 + 4 签文专用 + 5 时段/解析；详见下方 MCP Tools 清单）
   - 设备 setting API（5 POST + 1 GET，LLM 语义校准 + SQLite 持久化）
   - 按 user_id 分片的 JSONL 审计日志
   - 本地/云端双环境切换 + ngrok 隧道
@@ -30,9 +30,9 @@
 - 进行中: —
 - 待办:
   1. 硬件 SmartRing-Plus mazu_display.cc:1890 把 addon 里 `liuyao(...)` 改 `liuyao_verdict(...)`，下次 OTA 顺带
-  2. 项目状态/CLAUDE.md 同步到 memory/project_status.md
 
 ## 关键决策记录
+- 2026-06-21: 玄学库（kerykeion/kinqimen/kinliuren/ichingshifa/najia）在 requirements.txt 由 `>=` 改 `==` pin 死已验证版本。原因: 排盘算法库小版本可能改变输出，云端重装漂移会导致命理结果不一致。当前 pin: kerykeion 5.12.8 / kinqimen 0.0.6.6 / kinliuren 0.1.2.9 / ichingshifa 3.1.9 / najia 2.0.1。lunar/pureziwei/najia 算法本体已内联在 app/ 下不随 pip 变。
 - 2026-04-27: calendar_resolve 的 ganzhi_year_solar 改用 (start+end)/2 中点算干支，对齐 by_period.ganzhi_month。原因: 1/1 在立春前会算到上一年干支，与 by_period 字段打架，LLM 抄错导致 MazuKit v1.69 把 2026 说成"乙巳"。
 - 2026-04-26: 时段类提问统一走 *_period 工具，禁止 LLM 自行做农历换算/月柱推算/刑冲合害。原因: LLM 算术不可靠，必须由引擎权威给出。
 - 2026-04-25: 新增 calendar_resolve + 3 个 period 工具，作为时段类提问的标准前置/批量出口。
@@ -72,20 +72,20 @@
 - LLM: Kimi / OpenAI / Claude / Gemini 多厂商接口
 
 ## 关键文件
-- `mcp_server.py` — MCP Server 入口，15 个 Tools，含完整 instructions 调度指南
-- `app/engine/` — 15 个命理引擎，装饰器注册 `@register("system_name")`
+- `mcp_server.py` — MCP Server 入口，27 个 Tools，含完整 instructions 调度指南
+- `app/engine/` — 16 个命理引擎，装饰器注册 `@register("system_name")`
 - `app/engine/registry.py` — 引擎注册器，ChartRequest / ChartResult 数据模型
 - `cli.py` — CLI 交互入口，18 项菜单
 - `app/main.py` — FastAPI 入口
 - `app/api/v1/chart.py` — REST API 路由（通用 + 便捷接口）
-- `docs/mcp-trigger-prompts.md` — 15 个工具的语音唤醒提示词
+- `docs/mcp-trigger-prompts.md` — 各工具的语音唤醒提示词
 - `docs/mcp-system-prompt.md` — 大模型调度指南（意图路由/反问策略/解读风格）
 
-## MCP Tools（25 个）
-- 命理 (15): ziwei, bazi, meihua, liuyao, liuyao_qigua, astrology, qimen, liuren, iching, qianwen, jiemeng, name_analysis, hehun, almanac, jiri
+## MCP Tools（27 个）
+- 命理 (16): ziwei, bazi, meihua, liuyao, liuyao_qigua, astrology, qimen, liuren, iching, qianwen, jiemeng, name_analysis, hehun, almanac, jiri, **lifenumber**（生命灵数/西方数字学）
 - 算法断卦 (1): **liuyao_verdict** — 用神/旺衰/动变/四神/吉凶倾向，LLM 仅做白话翻译
 - 签文专用 (4): qianwen_guanyin, qianwen_huangdaxian, qianwen_zhuge, qianwen_mazu
-- 时段/解析 (4): calendar_resolve, ziwei_period, bazi_period, astrology_period
+- 时段/解析 (5): calendar_resolve, ziwei_period, bazi_period, astrology_period, **lifenumber_period**
 - 设备设置: 5 POST + 1 GET（不是 MCP，是 REST）— `/api/v1/setting/*`
 
 ## 开发约定
